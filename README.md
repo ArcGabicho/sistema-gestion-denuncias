@@ -5,7 +5,7 @@ Sistema web para agilizar denuncias policiales en comisarías peruanas
 
 
 
-![App Screenshot](https://i.imgur.com/cAsgKps.jpeg)
+![App Screenshot](https://i.imgur.com/9cCG6Nc.png)
 
 
 ## Instalación
