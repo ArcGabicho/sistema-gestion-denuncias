@@ -13,7 +13,7 @@ Sistema web para agilizar denuncias policiales en comisarías peruanas
 Instala mi proyecto
 
 ```bash
-  git clone https://github.com/GaboGabito05/sistema-gestion-denuncias.git
+  git clone https://github.com/GaboGabito05/sistema-gestion-denuncias-app.git
 ```
 
 ```bash
