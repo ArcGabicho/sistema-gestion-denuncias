@@ -45,5 +45,5 @@ Desarrollar un portal de denuncias digital que permita a los ciudadanos reportar
 ## Authors
 
 - [Gabriel Polack | Arquitecto de Software](https://www.linkedin.com/in/gabriel-polack-castillo/)
-- [Douglas Morean | Programador](https://www.linkedin.com/in/dunp3r/)
+- [Douglas Morean | Programador](https://github.com/dunp3r)
 
