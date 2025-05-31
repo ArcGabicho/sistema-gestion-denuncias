@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Getting Started
+# Portal de Denuncias PNP
 
-First, run the development server:
+Sistema web para agilizar denuncias policiales en comisarías peruanas
+
+
+
+![App Screenshot](https://i.imgur.com/9cCG6Nc.png)
+
+
+## Instalación
+
+Instala mi proyecto
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+  git clone https://github.com/GaboGabito05/sistema-gestion-denuncias-app.git
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+```bash
+  npm install
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+  npm run dev
+```
+## FAQ
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+#### 🚀 Objetivo
 
-## Learn More
+Desarrollar un portal de denuncias digital que permita a los ciudadanos reportar delitos no urgentes (hurto, pérdida de documentos, etc.) desde cualquier dispositivo, reduciendo la congestión en comisarías y mejorando la trazabilidad de los casos.
 
-To learn more about Next.js, take a look at the following resources:
+#### ✨ Características  
+✅ **Alta prioridad**  
+- Frontend: Interfaz responsive con Next.js.  
+- Seguridad: Autenticación JWT y cifrado.  
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+🔹 **Media prioridad**  
+- Backend: API REST con FastAPI.  
+- Integración: Conexión con SIDPOL.  
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+⚠️ **Baja prioridad**  
+- Base de datos: Soporte para Oracle DB.  
 
-## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Authors
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [Gabriel Polack | Arquitecto de Software](https://www.linkedin.com/in/gabriel-polack-castillo/)
+- [Douglas Morean | Programador](https://www.linkedin.com/in/douglasmorean/)
+
