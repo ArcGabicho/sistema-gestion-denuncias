@@ -8,3 +8,10 @@
   font-family: "Poppins", sans-serif;
   color-scheme: dark;
 }
+
+.form-error{
+  font-size: 13px;
+  color: red;
+  opacity: 70%;
+  margin-top: 5px;
+}

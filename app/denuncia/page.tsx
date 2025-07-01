@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import Link from "next/link";
 
 const Denuncia = () => {
     const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -20,7 +23,6 @@ const Denuncia = () => {
         evidence: null,
     });
     const [showModal, setShowModal] = useState(false);
-    const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
 
     useEffect(() => {
         // Set the current date
@@ -119,7 +121,7 @@ const Denuncia = () => {
                             id="date"
                             value={formData.date}
                             readOnly
-                            className="mt-1 p-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed"
+                            className="mt-1 p-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed text-black"
                         />
                     </div>
                     <div className="flex flex-col">
@@ -129,7 +131,7 @@ const Denuncia = () => {
                             id="location"
                             value={formData.location}
                             readOnly
-                            className="mt-1 p-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed"
+                            className="mt-1 p-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed text-black"
                         />
                     </div>
                     <div className="flex flex-col">
@@ -151,31 +153,53 @@ const Denuncia = () => {
             </div>
             <div className="hidden lg:block w-4/6 relative">
                 {location ? (
-                    <iframe
-                        title="Mapa de Ubicación"
-                        src={`https://www.google.com/maps/embed/v1/view?key=${googleMapsApiKey}&center=${location.lat},${location.lng}&zoom=15`}
-                        className="w-full h-full border-0"
-                        allowFullScreen
-                    ></iframe>
+                    <div className="absolute inset-0 w-full h-full">
+                        <MapContainer center={[location.lat, location.lng]} zoom={15} className="w-full h-full" style={{ height: '100%', width: '100%' }}>
+                            <TileLayer
+                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                            />
+                            <Marker position={[location.lat, location.lng]}>
+                                <Popup>Tu ubicación</Popup>
+                            </Marker>
+                        </MapContainer>
+                    </div>
                 ) : (
                     <p className="text-center mt-20">Obteniendo ubicación...</p>
                 )}
             </div>
             {showModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                    <div className="bg-white p-6 rounded-md shadow-md">
-                        <h2 className="text-xl font-bold mb-4">Denuncia Enviada</h2>
-                        <p><strong>Título:</strong> {formData.title}</p>
-                        <p><strong>Tipo de Delito:</strong> {formData.crimeType}</p>
-                        <p><strong>Descripción:</strong> {formData.description}</p>
-                        <p><strong>Fecha:</strong> {formData.date}</p>
-                        <p><strong>Ubicación:</strong> {formData.location}</p>
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
+                    <div className="bg-black p-10 rounded-lg shadow-2xl max-w-2xl w-full relative">
                         <button
                             onClick={() => setShowModal(false)}
-                            className="mt-4 bg-red-500 text-white py-2 px-4 rounded-md hover:bg-red-700 transition duration-200"
+                            className="absolute top-4 right-4 text-gray-400 hover:text-red-600 text-3xl font-bold focus:outline-none"
+                            aria-label="Cerrar"
                         >
-                            Cerrar
+                            ×
                         </button>
+                        <h2 className="text-2xl font-bold mb-6 text-center">Denuncia Enviada</h2>
+                        <div className="space-y-2 mb-8">
+                            <p><strong>Título:</strong> {formData.title}</p>
+                            <p><strong>Tipo de Delito:</strong> {formData.crimeType}</p>
+                            <p><strong>Descripción:</strong> {formData.description}</p>
+                            <p><strong>Fecha:</strong> {formData.date}</p>
+                            <p><strong>Ubicación:</strong> {formData.location}</p>
+                        </div>
+                        <div className="flex flex-col md:flex-row gap-4">
+                            <button
+                                onClick={() => setShowModal(false)}
+                                className="bg-gradient-to-r from-red-500 to-red-800 text-white py-2 px-4 rounded-md hover:bg-red-700 transition duration-200 w-full"
+                            >
+                                Realizar otra denuncia
+                            </button>
+                            <Link
+                                href="/"
+                                className="bg-gray-200 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-300 transition duration-200 w-full text-center"
+                            >
+                                Volver a inicio
+                            </Link>
+                        </div>
                     </div>
                 </div>
             )}

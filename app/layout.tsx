@@ -1,3 +1,4 @@
+import { Toaster } from 'react-hot-toast';
 import './globals.css'
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
@@ -22,6 +23,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             </head>
             <body>
                 {children}
+                <Toaster />
             </body>
         </html>
     )
