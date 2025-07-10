@@ -9,7 +9,7 @@ const Login = () => {
             </div>
             <div className="hidden md:block w-4/6 relative">
                 <Image 
-                    src="/assets/portada.jpg" 
+                    src="/assets/portada.png" 
                     alt="portada" 
                     layout="fill" 
                     objectFit="cover" 

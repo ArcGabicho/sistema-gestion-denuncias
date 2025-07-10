@@ -1,6 +1,6 @@
 "use client"
 
-import { Menu, X } from "lucide-react";
+import { Menu, X, LifeBuoy, LogIn } from "lucide-react";
 import { navItems } from "../constants/data";
 import { useState } from "react";
 
@@ -30,16 +30,18 @@ const Navbar = () => {
             ))}
           </ul>
           <div className="hidden lg:flex justify-center space-x-4 items-center">
-            <Link href="/login">
-              <button className="py-2 px-3 border rounded-md">
-                Ingresar
+            <Link target="_blank" href="https://wa.me/51923427564?text=Hola!%20Necesito%20soporte%20del%20sistema%20PeruSeguro">
+              <button className="flex items-center gap-2 py-2 px-3 border rounded-md">
+                  <LifeBuoy className="w-4 h-4" />
+                Soporte
               </button>
             </Link>
-            <Link href="/register">
+            <Link href="/login">
               <button
-                className="bg-gradient-to-r from-red-500 to-red-800 py-2 px-3 rounded-md"
+                className="flex items-center gap-2 bg-gradient-to-r from-red-500 to-red-800 py-2 px-3 rounded-md"
               >
-                Crear una cuenta
+                  <LogIn className="w-4 h-4" />
+                Ingresar
               </button>
             </Link>  
           </div>

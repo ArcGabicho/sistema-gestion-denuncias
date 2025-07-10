@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 const HeroSection = () => {
   return (
     <div id="Inicio" className="flex flex-col items-center mt-6 lg:mt-20">
@@ -27,14 +29,8 @@ const HeroSection = () => {
         </a>
       </div>
       <div className="flex mt-10 justify-center">
-        <video autoPlay loop muted className="rounded-lg w-1/2 border border-red-700 shadow-sm shadow-red-400 mx-2 my-4">
-          <source src="/assets/video-1.mp4" type="video/mp4" />
-          Your browser does not support the video tag.
-        </video>
-        <video autoPlay loop muted className="rounded-lg w-1/2 border border-red-700 shadow-sm shadow-red-400 mx-2 my-4">
-          <source src="/assets/video-2.mp4" type="video/mp4" />
-          Your browser does not support the video tag.
-        </video>
+        <Image src="/assets/portada-1.jpeg" className="rounded-lg w-[30rem] h-[20rem] border border-red-700 shadow-sm shadow-red-400 mx-2 my-4" width={900} height={50} alt="Video Thumbnail"  />
+        <Image src="/assets/portada-2.jpeg" className="rounded-lg w-[30rem] h-[20rem] border border-red-700 shadow-sm shadow-red-400 mx-2 my-4" width={900} height={50} alt="Video Thumbnail"  />
       </div>
     </div>
   );

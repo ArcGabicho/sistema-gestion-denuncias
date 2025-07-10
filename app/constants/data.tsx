@@ -63,11 +63,6 @@ export const checklistItems = [
       "Dar voz segura a víctimas mediante tecnología accesible.",
   },
   {
-    title: "Innovación Policial",
-    description:
-      "Modernizar procesos con inteligencia artificial y análisis de datos.",
-  },
-  {
     title: "Transparencia Judicial",
     description:
       "Garantizar trazabilidad digital en cada caso denunciado.",
@@ -76,11 +71,6 @@ export const checklistItems = [
     title: "Prevención Social",
     description:
       "Alertas tempranas para disuadir delitos en zonas críticas.",
-  },
-  {
-    title: "Unir Tecnología y Justicia",
-    description:
-      "Fusionar IA con procesos legales para máxima eficiencia.",
   },
   {
     title: "Crear Comunidades Alertas",

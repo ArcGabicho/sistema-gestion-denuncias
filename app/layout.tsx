@@ -1,4 +1,5 @@
 import { Toaster } from 'react-hot-toast';
+import 'leaflet/dist/leaflet.css';
 import './globals.css'
 
 const Layout = ({ children }: { children: React.ReactNode }) => {

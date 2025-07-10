@@ -1,11 +1,18 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 "use client";
 
 import { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import "leaflet/dist/leaflet.css";
+import { db } from "../firebase/firebase.config";
+import { collection, addDoc, getDocs } from "firebase/firestore";
+import toast from "react-hot-toast";
+import L from "leaflet";
 import Link from "next/link";
+import "leaflet/dist/leaflet.css";
+import { LoaderCircle } from "lucide-react";
 
 const Denuncia = () => {
+    const [isLoading, setIsLoading] = useState(false);
     const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [formData, setFormData] = useState<{
         title: string;
@@ -14,6 +21,7 @@ const Denuncia = () => {
         date: string;
         location: string;
         evidence: File | null;
+        whatsapp: string;
     }>({
         title: "",
         description: "",
@@ -21,21 +29,33 @@ const Denuncia = () => {
         date: "",
         location: "",
         evidence: null,
+        whatsapp: "",
     });
+
     const [showModal, setShowModal] = useState(false);
 
+    const getDireccion = async (lat: number, lon: number) => {
+        const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=es`
+        );
+        const data = await response.json();
+        return data.display_name || `${lat}, ${lon}`;
+    };
+
     useEffect(() => {
-        // Set the current date
+        const setDireccion = async (lat: number, lng: number) => {
+            const direccion = await getDireccion(lat, lng);
+            setFormData((prev) => ({ ...prev, location: direccion }));
+        };
+
         const currentDate = new Date().toLocaleDateString();
         setFormData((prev) => ({ ...prev, date: currentDate }));
 
-        // Get the user's location
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
-                    const loc = `${position.coords.latitude}, ${position.coords.longitude}`;
                     setLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
-                    setFormData((prev) => ({ ...prev, location: loc }));
+                    setDireccion(position.coords.latitude, position.coords.longitude);
                 },
                 (error) => {
                     console.error("Error getting location:", error);
@@ -60,16 +80,51 @@ const Denuncia = () => {
         }
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (L.Icon.Default.prototype as any)._getIconUrl;
+        L.Icon.Default.mergeOptions({
+        iconRetinaUrl: require("leaflet/dist/images/marker-icon-2x.png"),
+        iconUrl: require("leaflet/dist/images/marker-icon.png"),
+        shadowUrl: require("leaflet/dist/images/marker-shadow.png"),
+    });
+
+    const saveDenuncia = async (data: typeof formData) => {
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { evidence, ...denunciaSinArchivo } = data;
+
+            // 1. Obtener el número actual de denuncias
+            const snapshot = await getDocs(collection(db, "denuncias"));
+            const nextId = snapshot.size + 1;
+
+            // 2. Guardar la denuncia con el campo id consecutivo
+            await addDoc(collection(db, "denuncias"), {
+                ...denunciaSinArchivo,
+                status: "pendiente",
+                timestamp: new Date(),
+                id: nextId,
+            });
+
+            toast.success("Denuncia guardada correctamente");
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
+        } catch (error: any) {
+            toast.error("Error al guardar la denuncia");
+        }
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setIsLoading(true);
+        await saveDenuncia(formData);
+        setIsLoading(false);
         setShowModal(true);
     };
 
     return (
         <main className="flex flex-col lg:flex-row h-screen">
-            <div className="w-full lg:w-2/6 py-20 px-8 md:py-14 md:px-10">
+            <div className="w-full lg:w-2/6 py-16 px-8 md:py-10 md:px-10">
                 <h1 className="text-2xl font-bold mb-4">Formulario de Denuncia</h1>
-                <form className="space-y-4" onSubmit={handleSubmit}>
+                <form className="space-y-2" onSubmit={handleSubmit}>
                     <div className="flex flex-col">
                         <label htmlFor="title" className="text-sm font-medium">Título</label>
                         <input
@@ -90,6 +145,7 @@ const Denuncia = () => {
                             className="mt-1 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                         >
                             <option value="">Seleccione el tipo de delito</option>
+                            <option value="alimentos">Pensión de Alimentos</option>
                             <option value="robo">Robo</option>
                             <option value="estafa">Estafa</option>
                             <option value="violencia">Violencia</option>
@@ -135,6 +191,17 @@ const Denuncia = () => {
                         />
                     </div>
                     <div className="flex flex-col">
+                        <label htmlFor="whatsapp" className="text-sm font-medium">Contacto WhatsApp</label>
+                        <input
+                            type="text"
+                            id="whatsapp"
+                            value={formData.whatsapp}
+                            onChange={handleInputChange}
+                            placeholder="Ej: 987654321"
+                            className="mt-1 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                        />
+                    </div>
+                    <div className="flex flex-col">
                         <label htmlFor="evidence" className="text-sm font-medium">Evidencia</label>
                         <input
                             type="file"
@@ -145,8 +212,12 @@ const Denuncia = () => {
                     </div>
                     <button
                         type="submit"
-                        className="w-full bg-gradient-to-r from-red-500 to-red-800 text-white py-2 rounded-md hover:bg-red-700 transition duration-200"
+                        className="w-full bg-gradient-to-r from-red-500 to-red-800 text-white py-2 rounded-md hover:bg-red-700 transition duration-200 flex items-center justify-center"
+                        disabled={isLoading}
                     >
+                        {isLoading && (
+                            <LoaderCircle className="mr-2 size-4 animate-spin flex items-center justify-center" />
+                        )}
                         Enviar Denuncia
                     </button>
                 </form>
@@ -155,13 +226,13 @@ const Denuncia = () => {
                 {location ? (
                     <div className="absolute inset-0 w-full h-full">
                         <MapContainer center={[location.lat, location.lng]} zoom={15} className="w-full h-full" style={{ height: '100%', width: '100%' }}>
-                            <TileLayer
-                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                            />
-                            <Marker position={[location.lat, location.lng]}>
-                                <Popup>Tu ubicación</Popup>
-                            </Marker>
+                        <TileLayer
+                            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                            attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
+                        />
+                        <Marker position={[location.lat, location.lng]}>
+                            <Popup>Tu ubicación</Popup>
+                        </Marker>
                         </MapContainer>
                     </div>
                 ) : (
@@ -188,7 +259,18 @@ const Denuncia = () => {
                         </div>
                         <div className="flex flex-col md:flex-row gap-4">
                             <button
-                                onClick={() => setShowModal(false)}
+                                onClick={() => {
+                                    setShowModal(false);
+                                    setFormData({
+                                        title: "",
+                                        description: "",
+                                        crimeType: "",
+                                        date: new Date().toLocaleDateString(),
+                                        location: location ? `${location.lat}, ${location.lng}` : "",
+                                        evidence: null,
+                                        whatsapp: "",
+                                    });
+                                }}
                                 className="bg-gradient-to-r from-red-500 to-red-800 text-white py-2 px-4 rounded-md hover:bg-red-700 transition duration-200 w-full"
                             >
                                 Realizar otra denuncia
