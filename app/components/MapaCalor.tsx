@@ -1,12 +1,12 @@
-"use client";
+'use client';
 
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import { useEffect } from 'react';
-import L from 'leaflet';
+import L, { Layer } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.heat';
 
-// TypeScript declaration for leaflet.heat
+// Declaración extendida para usar heatLayer con tipo Layer
 declare module 'leaflet' {
   export function heatLayer(
     latlngs: Array<[number, number, number?]>,
@@ -18,25 +18,27 @@ declare module 'leaflet' {
       blur?: number;
       gradient?: { [key: number]: string };
     }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ): any;
+  ): Layer;
 }
 
 const points: [number, number, number?][] = [
-  // [lat, lng, intensity]
   [-12.0464, -77.0428, 0.8], // Lima
   [-12.0266, -77.1475, 0.7], // Callao
   [-12.0867, -77.0338, 0.6], // San Isidro
   [-12.1211, -77.0290, 0.9], // Miraflores
   [-12.0453, -77.0311, 0.5], // Cercado
-  // ...agrega más puntos según sea necesario
 ];
 
 function HeatmapLayerComponent({ points }: { points: [number, number, number?][] }) {
   const map = useMap();
 
   useEffect(() => {
-    const heatLayer = L.heatLayer(points, { radius: 25, blur: 15, maxZoom: 17 }).addTo(map);
+    const heatLayer = L.heatLayer(points, {
+      radius: 25,
+      blur: 15,
+      maxZoom: 17,
+    }).addTo(map);
+
     return () => {
       map.removeLayer(heatLayer);
     };

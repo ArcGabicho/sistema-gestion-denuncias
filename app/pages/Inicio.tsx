@@ -1,5 +1,10 @@
 import Estadisticas from "../components/Estadisticas";
-import MapaCalor from "../components/MapaCalor";
+import dynamic from 'next/dynamic';
+
+const MapaCalor = dynamic(() => import('../components/MapaCalor'), {
+  ssr: false,
+  loading: () => <p>Cargando mapa...</p>,
+});
 
 const Inicio = () => {
     return (
