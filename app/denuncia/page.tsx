@@ -2,47 +2,56 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import dynamic from "next/dynamic";
 import { db } from "../firebase/firebase.config";
 import { collection, addDoc, getDocs } from "firebase/firestore";
 import toast from "react-hot-toast";
-import L from "leaflet";
 import Link from "next/link";
-import "leaflet/dist/leaflet.css";
 import { LoaderCircle } from "lucide-react";
+
+// Lazy-load react-leaflet
+const MapContainer = dynamic(() => import("react-leaflet").then(mod => mod.MapContainer), { ssr: false });
+const TileLayer = dynamic(() => import("react-leaflet").then(mod => mod.TileLayer), { ssr: false });
+const Marker = dynamic(() => import("react-leaflet").then(mod => mod.Marker), { ssr: false });
+const Popup = dynamic(() => import("react-leaflet").then(mod => mod.Popup), { ssr: false });
 
 const Denuncia = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
-    const [formData, setFormData] = useState<{
-        title: string;
-        description: string;
-        crimeType: string;
-        date: string;
-        location: string;
-        evidence: File | null;
-        whatsapp: string;
-    }>({
+    const [formData, setFormData] = useState({
         title: "",
         description: "",
         crimeType: "",
         date: "",
         location: "",
-        evidence: null,
+        evidence: null as File | null,
         whatsapp: "",
     });
-
     const [showModal, setShowModal] = useState(false);
 
-    const getDireccion = async (lat: number, lon: number) => {
-        const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=es`
-        );
-        const data = await response.json();
-        return data.display_name || `${lat}, ${lon}`;
-    };
-
     useEffect(() => {
+        const loadLeafletIcons = async () => {
+            if (typeof window !== "undefined") {
+                const L = await import("leaflet");
+
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                delete (L.Icon.Default.prototype as any)._getIconUrl;
+                L.Icon.Default.mergeOptions({
+                    iconRetinaUrl: require("leaflet/dist/images/marker-icon-2x.png"),
+                    iconUrl: require("leaflet/dist/images/marker-icon.png"),
+                    shadowUrl: require("leaflet/dist/images/marker-shadow.png"),
+                });
+            }
+        };
+
+        const getDireccion = async (lat: number, lon: number) => {
+            const response = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=es`
+            );
+            const data = await response.json();
+            return data.display_name || `${lat}, ${lon}`;
+        };
+
         const setDireccion = async (lat: number, lng: number) => {
             const direccion = await getDireccion(lat, lng);
             setFormData((prev) => ({ ...prev, location: direccion }));
@@ -61,9 +70,9 @@ const Denuncia = () => {
                     console.error("Error getting location:", error);
                 }
             );
-        } else {
-            console.error("Geolocation is not supported by this browser.");
         }
+
+        loadLeafletIcons();
     }, []);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -73,31 +82,16 @@ const Denuncia = () => {
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
-        if (files && files.length > 0) {
-            setFormData((prev) => ({ ...prev, evidence: files[0] }));
-        } else {
-            setFormData((prev) => ({ ...prev, evidence: null }));
-        }
+        setFormData((prev) => ({ ...prev, evidence: files?.[0] ?? null }));
     };
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    delete (L.Icon.Default.prototype as any)._getIconUrl;
-        L.Icon.Default.mergeOptions({
-        iconRetinaUrl: require("leaflet/dist/images/marker-icon-2x.png"),
-        iconUrl: require("leaflet/dist/images/marker-icon.png"),
-        shadowUrl: require("leaflet/dist/images/marker-shadow.png"),
-    });
 
     const saveDenuncia = async (data: typeof formData) => {
         try {
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
             const { evidence, ...denunciaSinArchivo } = data;
-
-            // 1. Obtener el número actual de denuncias
             const snapshot = await getDocs(collection(db, "denuncias"));
             const nextId = snapshot.size + 1;
 
-            // 2. Guardar la denuncia con el campo id consecutivo
             await addDoc(collection(db, "denuncias"), {
                 ...denunciaSinArchivo,
                 status: "pendiente",
@@ -106,8 +100,8 @@ const Denuncia = () => {
             });
 
             toast.success("Denuncia guardada correctamente");
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
-        } catch (error: any) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        } catch (error) {
             toast.error("Error al guardar la denuncia");
         }
     };
@@ -225,14 +219,14 @@ const Denuncia = () => {
             <div className="hidden lg:block w-4/6 relative">
                 {location ? (
                     <div className="absolute inset-0 w-full h-full">
-                        <MapContainer center={[location.lat, location.lng]} zoom={15} className="w-full h-full" style={{ height: '100%', width: '100%' }}>
-                        <TileLayer
-                            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                            attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
-                        />
-                        <Marker position={[location.lat, location.lng]}>
-                            <Popup>Tu ubicación</Popup>
-                        </Marker>
+                        <MapContainer center={[location.lat, location.lng]} zoom={15} className="w-full h-full z-0">
+                            <TileLayer
+                                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                                attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
+                            />
+                            <Marker position={[location.lat, location.lng]}>
+                                <Popup>Tu ubicación</Popup>
+                            </Marker>
                         </MapContainer>
                     </div>
                 ) : (
