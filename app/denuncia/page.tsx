@@ -138,18 +138,27 @@ const Denuncia = () => {
                             onChange={handleInputChange}
                             className="mt-1 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                         >
-                            <option value="">Seleccione el tipo de delito</option>
-                            <option value="alimentos">Pensión de Alimentos</option>
-                            <option value="robo">Robo</option>
-                            <option value="estafa">Estafa</option>
-                            <option value="violencia">Violencia</option>
-                            <option value="acoso">Acoso</option>
-                            <option value="drogas">Poseción de drogas</option>
-                            <option value="corrupción">Corrupción</option>
-                            <option value="abuso">Abuso de Autoridad</option>
-                            <option value="homicidio">Homicidio</option>
-                            <option value="secuestro">Secuestro</option>
-                            <option value="violacion">Violación</option>
+                            <option value="">Seleccione el tipo de falta o delito</option>
+                            <option value="ruidos">Ruidos molestos fuera del horario permitido</option>
+                            <option value="espacios">Uso indebido de espacios comunes</option>
+                            <option value="obras">Obras sin autorización</option>
+                            <option value="mascotas">Maltrato a mascotas</option>
+                            <option value="conflictos">Conflictos entre vecinos</option>
+                            <option value="sustancias">Consumo de sustancias prohibidas en áreas comunes</option>
+                            <option value="reglamento">Incumplimiento del reglamento interno</option>
+                            <option value="estacionamiento">Estacionamiento en zonas no permitidas</option>
+                            <option value="daños">Daños a la propiedad común</option>
+                            <option value="basura">Disposición inadecuada de basura</option>
+                            <option value="apropiacion">Apropiación de áreas comunes</option>
+                            <option value="ingreso">Ingreso no autorizado de personas</option>
+                            <option value="amenazas">Amenazas o agresiones verbales</option>
+                            <option value="cuotas">Negativa al pago de cuotas o multas</option>
+                            <option value="objetos">Colocación de objetos en zonas comunes</option>
+                            <option value="animales">Tenencia de animales no permitidos</option>
+                            <option value="seguridad">Mal uso del sistema de seguridad</option>
+                            <option value="vandalismo">Actos de vandalismo</option>
+                            <option value="comercial">Actividades comerciales no autorizadas</option>
+                            <option value="eventos">Organización de eventos sin autorización</option>
                             <option value="otro">Otro</option>
                         </select>
                     </div>
