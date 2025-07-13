@@ -24,7 +24,10 @@ Instala mi proyecto
   npm run dev
 ```
 
-## Authors
+## Autor
 
 - [Gabriel Polack | Arquitecto de Software](https://www.linkedin.com/in/gabriel-polack-castillo/)
-- [Douglas Morean | Programador](https://www.linkedin.com/in/douglasmorean/)
+
+## Licencia
+
+Este proyecto está bajo la Licencia MIT - consulta el archivo [LICENSE](./LICENSE) para más detalles.
