@@ -31,7 +31,7 @@ const Dashboard = () => {
   return (
     <section className="relative flex">
       <Sidebar onChangeVista={({ href }) => setVistaActual(href)} />
-      <div className="flex-1 min-h-screen flex items-center justify-center overflow-hidden ml-64">
+      <div className="ml-64 flex-1 overflow-auto">
         {renderVista()}
       </div>
     </section>
