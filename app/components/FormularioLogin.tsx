@@ -42,6 +42,7 @@ const FormularioLogin = () => {
        setisLoading(true);
         try {
             await signIn(user);
+            toast.success("Inicio de sesión exitoso", {duration: 2500});
             router.push("/dashboard");
        // eslint-disable-next-line @typescript-eslint/no-explicit-any
        } catch (error: any) {

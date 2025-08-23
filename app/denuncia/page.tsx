@@ -3,8 +3,10 @@
 
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { db } from "../firebase/firebase.config";
+import { db, storage } from "../firebase/firebase.config";
 import { collection, addDoc, getDocs } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { doc, updateDoc } from "firebase/firestore";
 import toast from "react-hot-toast";
 import Link from "next/link";
 import { LoaderCircle } from "lucide-react";
@@ -28,6 +30,7 @@ const Denuncia = () => {
         whatsapp: "",
     });
     const [showModal, setShowModal] = useState(false);
+    const [evidenceUrl, setEvidenceUrl] = useState<string>("");
 
     useEffect(() => {
         const loadLeafletIcons = async () => {
@@ -87,22 +90,36 @@ const Denuncia = () => {
 
     const saveDenuncia = async (data: typeof formData) => {
         try {
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             const { evidence, ...denunciaSinArchivo } = data;
             const snapshot = await getDocs(collection(db, "denuncias"));
             const nextId = snapshot.size + 1;
 
-            await addDoc(collection(db, "denuncias"), {
+            // 1. Guarda la denuncia y obtén el ID
+            const docRef = await addDoc(collection(db, "denuncias"), {
                 ...denunciaSinArchivo,
                 status: "pendiente",
                 timestamp: new Date(),
                 id: nextId,
             });
 
+            // 2. Si hay evidencia, súbela a una carpeta con el ID de la denuncia
+            let evidenceUrl = "";
+            if (evidence && evidence instanceof File) {
+                const evidenceRef = ref(storage, `denuncias/${docRef.id}/${evidence.name}`);
+                await uploadBytes(evidenceRef, evidence);
+                evidenceUrl = await getDownloadURL(evidenceRef);
+
+                await updateDoc(doc(db, "denuncias", docRef.id), {
+                    evidenceUrl,
+                });
+
+                setEvidenceUrl(evidenceUrl); // <-- Agrega esto
+            }
+
             toast.success("Denuncia guardada correctamente");
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        } catch (error) {
-            toast.error("Error al guardar la denuncia");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } catch (error: any) {
+            toast.error(error.message || "Error al guardar la denuncia");
         }
     };
 
@@ -131,7 +148,7 @@ const Denuncia = () => {
                         />
                     </div>
                     <div className="flex flex-col">
-                        <label htmlFor="crimeType" className="text-sm font-medium">Tipo de Delito</label>
+                        <label htmlFor="crimeType" className="text-sm font-medium">Tipo de Falta</label>
                         <select
                             id="crimeType"
                             value={formData.crimeType}
@@ -225,7 +242,7 @@ const Denuncia = () => {
                     </button>
                 </form>
             </div>
-            <div className="hidden lg:block w-4/6 relative">
+            <div className="hidden lg:block w-4/6 h-screen relative">
                 {location ? (
                     <div className="absolute inset-0 w-full h-full">
                         <MapContainer center={[location.lat, location.lng]} zoom={15} className="w-full h-full z-0">
@@ -260,6 +277,31 @@ const Denuncia = () => {
                             <p><strong>Fecha:</strong> {formData.date}</p>
                             <p><strong>Ubicación:</strong> {formData.location}</p>
                         </div>
+                        {evidenceUrl && (
+                            <div className="mb-8">
+                                <p className="font-semibold mb-2">Evidencia enviada:</p>
+                                    {formData.evidence?.type?.startsWith("image/") && (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img src={evidenceUrl} alt="Evidencia" className="max-h-64 rounded mb-2" />
+                                    )}
+                                {formData.evidence?.type?.startsWith("video/") && (
+                                    <video controls className="max-h-64 rounded mb-2">
+                                        <source src={evidenceUrl} />
+                                        Tu navegador no soporta la reproducción de video.
+                                    </video>
+                                )}
+                                {formData.evidence && !formData.evidence.type?.startsWith("image/") && !formData.evidence.type?.startsWith("video/") && (
+                                    <a
+                                        href={evidenceUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-blue-400 underline"
+                                    >
+                                        Ver documento adjunto
+                                    </a>
+                                )}
+                            </div>
+                        )}
                         <div className="flex flex-col md:flex-row gap-4">
                             <button
                                 onClick={() => {

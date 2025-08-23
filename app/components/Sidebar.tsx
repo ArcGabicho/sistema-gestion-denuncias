@@ -26,6 +26,7 @@ const Sidebar = ({ onChangeVista }: SidebarProps) => {
         setLoading(true);
         try {
             await signOut(auth);
+            toast.success('Sesión cerrada correctamente', {duration: 2500});
             router.push('/');
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (error: any) {

@@ -28,7 +28,7 @@ const HeroSection = () => {
           Guía de uso
         </a>
       </div>
-      <div className="flex mt-10 justify-center">
+      <div className="flex flex-col md:flex-row mt-10 justify-center">
         <Image src="/assets/portada-1.jpeg" className="rounded-lg w-[30rem] h-[20rem] border border-red-700 shadow-sm shadow-red-400 mx-2 my-4" width={900} height={50} alt="Video Thumbnail"  />
         <Image src="/assets/portada-2.jpeg" className="rounded-lg w-[30rem] h-[20rem] border border-red-700 shadow-sm shadow-red-400 mx-2 my-4" width={900} height={50} alt="Video Thumbnail"  />
       </div>

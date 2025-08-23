@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { collection, getDocs, doc, updateDoc, deleteDoc } from "firebase/firestore";
-import { Search, Pencil, Trash2, X, Check, LoaderCircle } from "lucide-react";
+import { Search, Pencil, Trash2, X, Check, LoaderCircle, MessageCircle, Bot } from "lucide-react";
+import Link from "next/link";
 import { db } from "../firebase/firebase.config";
 
 const ESTADOS = ["Todos", "Pendiente", "En proceso", "Resuelto"];
@@ -209,84 +210,120 @@ const Denuncias = () => {
                     ))}
                 </select>
             </form>
-            <div className="overflow-x-auto rounded-lg shadow-lg border border-zinc-700 bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-800">
-                <table className="min-w-full text-sm text-left border-separate border-spacing-y-1">
-                    <thead className="sticky top-0 z-10 bg-zinc-900/95 backdrop-blur border-b border-zinc-700">
-                        <tr>
-                            <th className="px-4 py-3 font-semibold text-red-400 uppercase tracking-wider text-xs border-b border-zinc-700">ID</th>
-                            <th className="px-4 py-3 font-semibold text-red-400 uppercase tracking-wider text-xs border-b border-zinc-700">Título</th>
-                            <th className="px-4 py-3 font-semibold text-red-400 uppercase tracking-wider text-xs border-b border-zinc-700">Tipo de delito</th>
-                            <th className="px-4 py-3 font-semibold text-red-400 uppercase tracking-wider text-xs border-b border-zinc-700">Descripción</th>
-                            <th className="px-4 py-3 font-semibold text-red-400 uppercase tracking-wider text-xs border-b border-zinc-700">Fecha</th>
-                            <th className="px-4 py-3 font-semibold text-red-400 uppercase tracking-wider text-xs border-b border-zinc-700">Ubicación</th>
-                            <th className="px-4 py-3 font-semibold text-red-400 uppercase tracking-wider text-xs border-b border-zinc-700">Estado</th>
-                            <th className="px-4 py-3 font-semibold text-red-400 uppercase tracking-wider text-xs border-b border-zinc-700">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {loading ? (
-                            <tr>
-                                <td colSpan={8} className="px-4 py-8 text-center text-zinc-400">
-                                    Cargando denuncias...
-                                </td>
-                            </tr>
-                        ) : resultados.length > 0 ? (
-                            resultados.map(denuncia => {
-                                const estado = normalizeEstado(denuncia.estado || denuncia.status);
-                                let estadoColor = "text-white";
-                                if (estado === "Pendiente") estadoColor = "text-yellow-400";
-                                else if (estado === "Resuelto") estadoColor = "text-green-400";
-                                else if (estado === "En proceso") estadoColor = "text-blue-400";
-                                return (
-                                    <tr
-                                        key={denuncia.id}
-                                        className="bg-zinc-800/80 hover:bg-zinc-700/80 transition-colors border border-zinc-700 rounded-lg shadow-sm"
-                                    >
-                                        <td className="px-4 py-3 text-white font-mono">{denuncia.id}</td>
-                                        <td className="px-4 py-3 text-white max-w-xs truncate">{denuncia.titulo || denuncia.title}</td>
-                                        <td className="px-4 py-3 text-white">{capitalize(denuncia.tipo || denuncia.crimeType)}</td>
-                                        <td className="px-4 py-3 text-zinc-300 max-w-xs truncate">{denuncia.descripcion || denuncia.description}</td>
-                                        <td className="px-4 py-3 text-zinc-400">{denuncia.fecha || denuncia.date}</td>
-                                        <td className="px-4 py-3 text-zinc-300">{denuncia.ubicacion || denuncia.location}</td>
-                                        <td className="px-4 py-3">
-                                            <span className={`flex font-semibold whitespace-nowrap px-2 py-1 rounded ${estadoColor} bg-zinc-900/60`}>
-                                                {estado}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3 flex gap-2">
+            <div className="space-y-4">
+                {loading ? (
+                    <div className="flex justify-center items-center py-8">
+                        <LoaderCircle className="w-8 h-8 animate-spin text-red-400" />
+                        <span className="ml-2 text-zinc-400">Cargando denuncias...</span>
+                    </div>
+                ) : resultados.length > 0 ? (
+                    resultados.map(denuncia => {
+                        const estado = normalizeEstado(denuncia.estado || denuncia.status);
+                        let estadoColor = "bg-zinc-600";
+                        if (estado === "Pendiente") estadoColor = "bg-yellow-600";
+                        else if (estado === "Resuelto") estadoColor = "bg-green-600";
+                        else if (estado === "En proceso") estadoColor = "bg-blue-600";
+                        
+                        return (
+                            <Link
+                                key={denuncia.firestoreId}
+                                href={`pages/denuncias/${denuncia.firestoreId}`}
+                                className="block group"
+                            >
+                                <div className="bg-gradient-to-r from-zinc-800 via-zinc-900 to-zinc-800 rounded-lg p-6 border border-zinc-700 hover:border-red-500 transition-all duration-300 hover:shadow-lg hover:shadow-red-500/20 w-full">
+                                    <div className="flex items-center justify-between gap-6">
+                                        {/* Información principal */}
+                                        <div className="flex items-center gap-6 flex-1">
+                                            {/* ID */}
+                                            <div className="flex-shrink-0">
+                                                <span className="text-red-400 font-mono text-xl font-bold">#{denuncia.id}</span>
+                                            </div>
+                                            
+                                            {/* Título y tipo */}
+                                            <div className="flex-1 min-w-0">
+                                                <h3 className="text-white font-semibold text-lg mb-1 truncate group-hover:text-red-300 transition-colors">
+                                                    {denuncia.titulo || denuncia.title}
+                                                </h3>
+                                                <p className="text-zinc-400 text-sm truncate">
+                                                    {capitalize(denuncia.tipo || denuncia.crimeType)}
+                                                </p>
+                                            </div>
+                                            
+                                            {/* Estado */}
+                                            <div className="flex-shrink-0">
+                                                <span className={`px-4 py-2 rounded-full text-sm font-semibold text-white ${estadoColor}`}>
+                                                    {estado}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Botones de acción */}
+                                        <div className="flex items-center gap-2 flex-shrink-0">
+                                            {/* Botones de editar/eliminar */}
                                             <button
-                                                className="p-1 rounded hover:bg-red-950 focus:bg-red-950 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-transform duration-150 hover:scale-110"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    handleEdit(denuncia);
+                                                }}
+                                                className="p-2 rounded-full hover:bg-red-950 focus:bg-red-950 focus:outline-none focus:ring-2 focus:ring-red-400 transition-all duration-150 hover:scale-110"
                                                 title="Editar"
                                                 aria-label="Editar denuncia"
-                                                tabIndex={0}
-                                                onClick={() => handleEdit(denuncia)}
                                             >
-                                                <span className="sr-only">Editar</span>
                                                 <Pencil className="w-4 h-4 text-red-400" />
                                             </button>
                                             <button
-                                                className="p-1 rounded hover:bg-red-950 focus:bg-red-950 focus:outline-none focus:ring-2 focus:ring-red-400 transition-transform duration-150 hover:scale-110"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    handleDelete(denuncia);
+                                                }}
+                                                className="p-2 rounded-full hover:bg-red-950 focus:bg-red-950 focus:outline-none focus:ring-2 focus:ring-red-400 transition-all duration-150 hover:scale-110"
                                                 title="Eliminar"
                                                 aria-label="Eliminar denuncia"
-                                                tabIndex={0}
-                                                onClick={() => handleDelete(denuncia)}
                                             >
-                                                <span className="sr-only">Eliminar</span>
                                                 <Trash2 className="w-4 h-4 text-red-400" />
                                             </button>
-                                        </td>
-                                    </tr>
-                                );
-                            })
-                        ) : (
-                            <tr>
-                                <td colSpan={8} className="px-4 py-8 text-center text-zinc-400">
-                                    No hay denuncias que coincidan con la búsqueda.
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
+                                            
+                                            {/* Separador */}
+                                            <div className="w-px h-8 bg-zinc-600 mx-2"></div>
+                                            
+                                            {/* Botón WhatsApp */}
+                                            <button
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    const whatsappUrl = `https://wa.me/${denuncia.whatsapp || ''}?text=Hola, me comunico en relación a la denuncia #${denuncia.id}: ${denuncia.titulo || denuncia.title}`;
+                                                    window.open(whatsappUrl, '_blank');
+                                                }}
+                                                className="p-2 rounded-full bg-green-600 hover:bg-green-700 focus:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-400 transition-all duration-150 hover:scale-110"
+                                                title="Contactar por WhatsApp"
+                                                aria-label="Contactar por WhatsApp"
+                                            >
+                                                <MessageCircle className="w-4 h-4 text-white" />
+                                            </button>
+                                            
+                                            {/* Botón IA */}
+                                            <button
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    // Aquí puedes agregar la lógica para la IA
+                                                    console.log('Analizar con IA:', denuncia);
+                                                }}
+                                                className="p-2 rounded-full bg-purple-600 hover:bg-purple-700 focus:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-400 transition-all duration-150 hover:scale-110"
+                                                title="Analizar con IA"
+                                                aria-label="Analizar con IA"
+                                            >
+                                                <Bot className="w-4 h-4 text-white" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </Link>
+                        );
+                    })
+                ) : (
+                    <div className="text-center py-8">
+                        <p className="text-zinc-400">No hay denuncias que coincidan con la búsqueda.</p>
+                    </div>
+                )}
             </div>
 
             {/* Modal de edición */}
