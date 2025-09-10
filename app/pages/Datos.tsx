@@ -1,8 +1,8 @@
-const Reportes = () => {
+const Datos = () => {
     return (
         <>
         </>
     )
 }
 
-export default Reportes;
+export default Datos;

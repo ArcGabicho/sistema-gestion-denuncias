@@ -30,10 +30,10 @@ const Navbar = () => {
             ))}
           </ul>
           <div className="hidden lg:flex justify-center space-x-4 items-center">
-            <Link target="_blank" href="https://wa.me/51923427564?text=Hola!%20Necesito%20soporte%20del%20sistema%20PeruSeguro">
+            <Link href="/register">
               <button className="flex items-center gap-2 py-2 px-3 border rounded-md">
-                  <LifeBuoy className="w-4 h-4" />
-                Soporte
+                <LifeBuoy className="w-4 h-4" />
+                Registrarse
               </button>
             </Link>
             <Link href="/login">

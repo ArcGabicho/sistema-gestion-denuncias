@@ -1,442 +1,624 @@
-import { useState, useMemo, useEffect } from "react";
-import { collection, getDocs, doc, updateDoc, deleteDoc } from "firebase/firestore";
-import { Search, Pencil, Trash2, X, Check, LoaderCircle, MessageCircle, Bot } from "lucide-react";
-import Link from "next/link";
-import { db } from "../firebase/firebase.config";
+/* eslint-disable @next/next/no-img-element */
+'use client';
 
-const ESTADOS = ["Todos", "Pendiente", "En proceso", "Resuelto"];
+import React, { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Search,  
+  Plus, 
+  MapPin, 
+  Calendar, 
+  User, 
+  Clock, 
+  AlertCircle,
+  CheckCircle,
+  XCircle,
+  Eye,
+  X,
+  FileText
+} from 'lucide-react';
+import { collection, getDocs, addDoc, Timestamp, query, orderBy, where } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage, auth } from '@/app/utils/firebase';
+import { DenunciaInterna, FALTAS_ADMINISTRATIVAS, FaltaAdministrativa } from '@/app/interfaces/DenunciaInterna';
+import { toast } from 'react-hot-toast';
 
-// Capitaliza la primera letra de un string
-function capitalize(str: string) {
-    if (!str) return "";
-    return str.charAt(0).toUpperCase() + str.slice(1);
-}
-
-// Normaliza el estado para comparación y visualización
-function normalizeEstado(estado: string) {
-    if (!estado) return "";
-    const e = estado.trim().toLowerCase();
-    if (e === "pendiente") return "Pendiente";
-    if (e === "en proceso" || e === "en_proceso" || e === "enproceso") return "En proceso";
-    if (e === "resuelto") return "Resuelto";
-    return capitalize(estado);
+interface DenunciaFormData {
+  titulo: string;
+  descripcion: string;
+  tipo: FaltaAdministrativa;
+  comunidadId: string;
+  ubicacion: string;
+  anonima: boolean;
+  evidencias: File[];
 }
 
 const Denuncias = () => {
-    const [busqueda, setBusqueda] = useState("");
-    const [filtro, setFiltro] = useState("Todos");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [denuncias, setDenuncias] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [editModal, setEditModal] = useState<{open: boolean, denuncia: any | null}>({open: false, denuncia: null});
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [deleteModal, setDeleteModal] = useState<{open: boolean, denuncia: any | null}>({open: false, denuncia: null});
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [editForm, setEditForm] = useState<any>({});
-    const [saving, setSaving] = useState(false);
-    const [deleting, setDeleting] = useState(false);
-    const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [denuncias, setDenuncias] = useState<DenunciaInterna[]>([]);
+  const [filteredDenuncias, setFilteredDenuncias] = useState<DenunciaInterna[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedFilter, setSelectedFilter] = useState<string>('todas');
+  const [selectedTipo, setSelectedTipo] = useState<string>('todos');
+  const [showModal, setShowModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedDenuncia, setSelectedDenuncia] = useState<DenunciaInterna | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  
+  // Comunidad actual - por ahora hardcodeada, pero debería venir del contexto de usuario/auth
+  const [currentCommunityId] = useState('comunidad-general');
 
-    useEffect(() => {
-        const fetchDenuncias = async () => {
-            setLoading(true);
-            const snapshot = await getDocs(collection(db, "denuncias"));
-            const docs = snapshot.docs.map(doc => ({
-                ...doc.data(),
-                id: doc.data().id || doc.id, // id consecutivo o firestore
-                firestoreId: doc.id, // id real de firestore SIEMPRE
-            }));
-            setDenuncias(docs);
-            setLoading(false);
-        };
-        fetchDenuncias();
-    }, []);
+  const [formData, setFormData] = useState<DenunciaFormData>({
+    titulo: '',
+    descripcion: '',
+    tipo: 'otros',
+    comunidadId: currentCommunityId, // Usar la comunidad actual
+    ubicacion: '',
+    anonima: false,
+    evidencias: []
+  });
 
-    const resultados = useMemo(() => {
-        const filtradas = denuncias.filter(d => {
-            const estado = normalizeEstado(d.estado || d.status || "");
-            const filtroNorm = normalizeEstado(filtro);
-            const coincideEstado = filtroNorm === "Todos" || estado === filtroNorm;
-            const coincideBusqueda =
-                (d.titulo || d.title || "").toLowerCase().includes(busqueda.toLowerCase()) ||
-                (d.tipo || d.crimeType || "").toLowerCase().includes(busqueda.toLowerCase()) ||
-                (d.descripcion || d.description || "").toLowerCase().includes(busqueda.toLowerCase()) ||
-                (d.ubicacion || d.location || "").toLowerCase().includes(busqueda.toLowerCase());
-            return coincideEstado && coincideBusqueda;
-        });
-        // Ordena por id si existe
-        filtradas.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
-        return filtradas.slice(0, 10);
-    }, [busqueda, filtro, denuncias]);
+  const loadDenuncias = useCallback(async () => {
+    try {
+      // Filtrar denuncias solo de la comunidad actual
+      const q = query(
+        collection(db, 'denuncias_internas'), 
+        where('comunidadId', '==', currentCommunityId),
+        orderBy('fechaCreacion', 'desc')
+      );
+      const querySnapshot = await getDocs(q);
+      const denunciasData = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as DenunciaInterna[];
+      
+      setDenuncias(denunciasData);
+    } catch (error) {
+      console.error('Error loading denuncias:', error);
+      toast.error('Error al cargar las denuncias');
+      // Si hay error con el filtro, mostrar lista vacía en lugar de todas las denuncias
+      setDenuncias([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentCommunityId]);
 
-    const handleBuscar = (e?: React.FormEvent) => {
-        if (e) e.preventDefault();
+  // Cargar denuncias
+  useEffect(() => {
+    loadDenuncias();
+  }, [loadDenuncias]);
+
+  // Filtrar denuncias
+  useEffect(() => {
+    let filtered = [...denuncias];
+
+    // Filtro por búsqueda
+    if (searchTerm) {
+      filtered = filtered.filter(denuncia => 
+        denuncia.titulo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        denuncia.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        denuncia.ubicacion?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Filtro por estado
+    if (selectedFilter !== 'todas') {
+      filtered = filtered.filter(denuncia => denuncia.estado === selectedFilter);
+    }
+
+    // Filtro por tipo
+    if (selectedTipo !== 'todos') {
+      filtered = filtered.filter(denuncia => denuncia.tipo === selectedTipo);
+    }
+
+    setFilteredDenuncias(filtered);
+  }, [denuncias, searchTerm, selectedFilter, selectedTipo]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.titulo || !formData.descripcion) {
+      toast.error('Por favor completa los campos obligatorios');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      // Subir evidencias si las hay
+      let evidenciaUrls: string[] = [];
+      if (formData.evidencias.length > 0) {
+        evidenciaUrls = await uploadEvidencias(formData.evidencias);
+      }
+
+      // Crear denuncia
+      const denunciaData = {
+        titulo: formData.titulo,
+        descripcion: formData.descripcion,
+        tipo: formData.tipo,
+        estado: 'pendiente' as const,
+        comunidadId: formData.comunidadId,
+        denuncianteId: formData.anonima ? undefined : auth.currentUser?.uid,
+        fechaCreacion: Timestamp.now(),
+        fechaActualizacion: Timestamp.now(),
+        ubicacion: formData.ubicacion,
+        evidenciaUrls,
+        anonima: formData.anonima
+      };
+
+      await addDoc(collection(db, 'denuncias_internas'), denunciaData);
+      
+      toast.success('Denuncia creada exitosamente');
+      setShowModal(false);
+      resetForm();
+      loadDenuncias();
+    } catch (error) {
+      console.error('Error creating denuncia:', error);
+      toast.error('Error al crear la denuncia');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const uploadEvidencias = async (files: File[]): Promise<string[]> => {
+    const urls: string[] = [];
+    for (const file of files) {
+      const fileName = `evidencias/${Date.now()}_${file.name}`;
+      const storageRef = ref(storage, fileName);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+      urls.push(url);
+    }
+    return urls;
+  };
+
+  const resetForm = () => {
+    setFormData({
+      titulo: '',
+      descripcion: '',
+      tipo: 'otros',
+      comunidadId: currentCommunityId, // Usar la comunidad actual
+      ubicacion: '',
+      anonima: false,
+      evidencias: []
+    });
+  };
+
+  const getEstadoColor = (estado: string) => {
+    switch (estado) {
+      case 'pendiente': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+      case 'en_proceso': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      case 'resuelta': return 'bg-green-500/20 text-green-400 border-green-500/30';
+      case 'rechazada': return 'bg-red-500/20 text-red-400 border-red-500/30';
+      default: return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+    }
+  };
+
+  const getEstadoIcon = (estado: string) => {
+    switch (estado) {
+      case 'pendiente': return <Clock className="h-4 w-4" />;
+      case 'en_proceso': return <AlertCircle className="h-4 w-4" />;
+      case 'resuelta': return <CheckCircle className="h-4 w-4" />;
+      case 'rechazada': return <XCircle className="h-4 w-4" />;
+      default: return <Clock className="h-4 w-4" />;
+    }
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const formatDate = (timestamp: any) => {
+    if (!timestamp) return 'Fecha no disponible';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleDateString('es-ES', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getTipoLabel = (tipo: string) => {
+    const labels: Record<string, string> = {
+      ruido: 'Ruido',
+      basura: 'Basura',
+      construccion: 'Construcción',
+      seguridad: 'Seguridad',
+      mascotas: 'Mascotas',
+      ocupacion_espacio_publico: 'Ocupación Espacio Público',
+      vandalismo: 'Vandalismo',
+      vehiculos_mal_estacionados: 'Vehículos Mal Estacionados',
+      iluminacion: 'Iluminación',
+      otros: 'Otros'
     };
+    return labels[tipo] || tipo;
+  };
 
-    // Abrir modal de edición
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleEdit = (denuncia: any) => {
-        // Obtener fecha actual en formato DD/MM/YYYY
-        const today = new Date();
-        const dd = String(today.getDate()).padStart(2, "0");
-        const mm = String(today.getMonth() + 1).padStart(2, "0");
-        const yyyy = today.getFullYear();
-        const currentDate = `${dd}/${mm}/${yyyy}`;
-
-        setEditForm({
-            title: denuncia.title || "",
-            crimeType: denuncia.crimeType || "",
-            description: denuncia.description || "",
-            date: currentDate,
-            location: denuncia.location || "",
-            status: denuncia.status || "pendiente",
-            firestoreId: denuncia.firestoreId,
-            id: denuncia.id,
-        });
-        setEditModal({open: true, denuncia});
-    };
-
-    // Guardar cambios en firestore
-    const handleSaveEdit = async () => {
-        if (!editModal.denuncia) return;
-        setSaving(true);
-        const firestoreId = editModal.denuncia.firestoreId || editModal.denuncia.id;
-        try {
-            const ref = doc(db, "denuncias", firestoreId);
-            await updateDoc(ref, {
-                title: editForm.title,
-                crimeType: editForm.crimeType,
-                description: editForm.description,
-                date: editForm.date,
-                location: editForm.location,
-                status: editForm.status,
-                id: editForm.id,
-            });
-            setEditModal({open: false, denuncia: null});
-            setToast({ type: "success", message: "Denuncia editada correctamente." });
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        } catch (err) {
-            setToast({ type: "error", message: "Error al editar la denuncia." });
-        }
-        setSaving(false);
-        // Refrescar denuncias
-        const snapshot = await getDocs(collection(db, "denuncias"));
-        const docs = snapshot.docs.map(doc => ({
-            ...doc.data(),
-            id: doc.data().id || doc.id,
-            firestoreId: doc.id,
-        }));
-        setDenuncias(docs);
-    };
-
-    // Abrir modal de eliminar
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleDelete = (denuncia: any) => {
-        setDeleteModal({open: true, denuncia});
-    };
-
-    // Confirmar eliminación
-    const handleConfirmDelete = async () => {
-        if (!deleteModal.denuncia) return;
-        setDeleting(true);
-        const firestoreId = deleteModal.denuncia.firestoreId || deleteModal.denuncia.id;
-        try {
-            await deleteDoc(doc(db, "denuncias", firestoreId));
-            setDeleteModal({open: false, denuncia: null});
-            setToast({ type: "success", message: "Denuncia eliminada correctamente." });
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        } catch (err) {
-            setToast({ type: "error", message: "Error al eliminar la denuncia." });
-        }
-        setDeleting(false);
-        // Refrescar denuncias
-        const snapshot = await getDocs(collection(db, "denuncias"));
-        const docs = snapshot.docs.map(doc => ({
-            ...doc.data(),
-            id: doc.data().id || doc.id,
-            firestoreId: doc.id,
-        }));
-        setDenuncias(docs);
-    };
-
-    // Mostrar toast por 3 segundos
-    useEffect(() => {
-        if (toast) {
-            const timer = setTimeout(() => setToast(null), 3000);
-            return () => clearTimeout(timer);
-        }
-    }, [toast]);
-
+  if (loading) {
     return (
-        <section className="h-full p-4 md:p-12">
-            {/* Toast notification */}
-            {toast && (
-                <div
-                    className={`fixed top-6 right-6 z-[9999] px-6 py-3 rounded shadow-lg flex items-center gap-3
-                        ${toast.type === "success" ? "bg-green-700 text-white" : "bg-red-700 text-white"}`}
-                    role="alert"
-                >
-                    {toast.type === "success" ? (
-                        <Check className="w-5 h-5" />
-                    ) : (
-                        <X className="w-5 h-5" />
-                    )}
-                    <span>{toast.message}</span>
-                </div>
-            )}
-            <form
-                className="flex flex-col md:flex-row gap-3 items-center mb-6"
-                onSubmit={handleBuscar}
-                autoComplete="off"
-            >
-                <div className="relative w-full md:w-1/3">
-                    <input
-                        type="text"
-                        placeholder="Buscar denuncia..."
-                        value={busqueda}
-                        onChange={e => setBusqueda(e.target.value)}
-                        className="w-full pl-10 pr-3 py-2 border border-zinc-700 bg-zinc-800 text-white rounded focus:outline-none focus:ring-2 focus:ring-red-600 transition placeholder:text-zinc-400"
-                    />
-                    <Search className="absolute left-2 top-2.5 text-zinc-400 w-5 h-5 pointer-events-none" />
-                </div>
-                <select
-                    value={filtro}
-                    onChange={e => setFiltro(e.target.value)}
-                    className="w-full md:w-auto px-3 py-2 border border-zinc-700 bg-zinc-800 text-white rounded focus:outline-none focus:ring-2 focus:ring-red-600 transition"
-                >
-                    {ESTADOS.map(estado => (
-                        <option key={estado} value={estado}>{estado}</option>
-                    ))}
-                </select>
-            </form>
-            <div className="space-y-4">
-                {loading ? (
-                    <div className="flex justify-center items-center py-8">
-                        <LoaderCircle className="w-8 h-8 animate-spin text-red-400" />
-                        <span className="ml-2 text-zinc-400">Cargando denuncias...</span>
-                    </div>
-                ) : resultados.length > 0 ? (
-                    resultados.map(denuncia => {
-                        const estado = normalizeEstado(denuncia.estado || denuncia.status);
-                        let estadoColor = "bg-zinc-600";
-                        if (estado === "Pendiente") estadoColor = "bg-yellow-600";
-                        else if (estado === "Resuelto") estadoColor = "bg-green-600";
-                        else if (estado === "En proceso") estadoColor = "bg-blue-600";
-                        
-                        return (
-                            <Link
-                                key={denuncia.firestoreId}
-                                href={`pages/denuncias/${denuncia.firestoreId}`}
-                                className="block group"
-                            >
-                                <div className="bg-gradient-to-r from-zinc-800 via-zinc-900 to-zinc-800 rounded-lg p-6 border border-zinc-700 hover:border-red-500 transition-all duration-300 hover:shadow-lg hover:shadow-red-500/20 w-full">
-                                    <div className="flex items-center justify-between gap-6">
-                                        {/* Información principal */}
-                                        <div className="flex items-center gap-6 flex-1">
-                                            {/* ID */}
-                                            <div className="flex-shrink-0">
-                                                <span className="text-red-400 font-mono text-xl font-bold">#{denuncia.id}</span>
-                                            </div>
-                                            
-                                            {/* Título y tipo */}
-                                            <div className="flex-1 min-w-0">
-                                                <h3 className="text-white font-semibold text-lg mb-1 truncate group-hover:text-red-300 transition-colors">
-                                                    {denuncia.titulo || denuncia.title}
-                                                </h3>
-                                                <p className="text-zinc-400 text-sm truncate">
-                                                    {capitalize(denuncia.tipo || denuncia.crimeType)}
-                                                </p>
-                                            </div>
-                                            
-                                            {/* Estado */}
-                                            <div className="flex-shrink-0">
-                                                <span className={`px-4 py-2 rounded-full text-sm font-semibold text-white ${estadoColor}`}>
-                                                    {estado}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        
-                                        {/* Botones de acción */}
-                                        <div className="flex items-center gap-2 flex-shrink-0">
-                                            {/* Botones de editar/eliminar */}
-                                            <button
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    handleEdit(denuncia);
-                                                }}
-                                                className="p-2 rounded-full hover:bg-red-950 focus:bg-red-950 focus:outline-none focus:ring-2 focus:ring-red-400 transition-all duration-150 hover:scale-110"
-                                                title="Editar"
-                                                aria-label="Editar denuncia"
-                                            >
-                                                <Pencil className="w-4 h-4 text-red-400" />
-                                            </button>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    handleDelete(denuncia);
-                                                }}
-                                                className="p-2 rounded-full hover:bg-red-950 focus:bg-red-950 focus:outline-none focus:ring-2 focus:ring-red-400 transition-all duration-150 hover:scale-110"
-                                                title="Eliminar"
-                                                aria-label="Eliminar denuncia"
-                                            >
-                                                <Trash2 className="w-4 h-4 text-red-400" />
-                                            </button>
-                                            
-                                            {/* Separador */}
-                                            <div className="w-px h-8 bg-zinc-600 mx-2"></div>
-                                            
-                                            {/* Botón WhatsApp */}
-                                            <button
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    const whatsappUrl = `https://wa.me/${denuncia.whatsapp || ''}?text=Hola, me comunico en relación a la denuncia #${denuncia.id}: ${denuncia.titulo || denuncia.title}`;
-                                                    window.open(whatsappUrl, '_blank');
-                                                }}
-                                                className="p-2 rounded-full bg-green-600 hover:bg-green-700 focus:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-400 transition-all duration-150 hover:scale-110"
-                                                title="Contactar por WhatsApp"
-                                                aria-label="Contactar por WhatsApp"
-                                            >
-                                                <MessageCircle className="w-4 h-4 text-white" />
-                                            </button>
-                                            
-                                            {/* Botón IA */}
-                                            <button
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    // Aquí puedes agregar la lógica para la IA
-                                                    console.log('Analizar con IA:', denuncia);
-                                                }}
-                                                className="p-2 rounded-full bg-purple-600 hover:bg-purple-700 focus:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-400 transition-all duration-150 hover:scale-110"
-                                                title="Analizar con IA"
-                                                aria-label="Analizar con IA"
-                                            >
-                                                <Bot className="w-4 h-4 text-white" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </Link>
-                        );
-                    })
-                ) : (
-                    <div className="text-center py-8">
-                        <p className="text-zinc-400">No hay denuncias que coincidan con la búsqueda.</p>
-                    </div>
-                )}
+      <div className="min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col p-4">
+      <div className="max-w-7xl mx-auto w-full flex flex-col h-full">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-4 flex-shrink-0"
+        >
+          <h1 className="text-2xl font-bold text-white mb-1">
+            Gestión de Denuncias
+          </h1>
+          <p className="text-zinc-400 text-sm">
+            Administra y consulta todas las denuncias de la comunidad
+          </p>
+        </motion.div>
+
+        {/* Barra de búsqueda y filtros */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-zinc-800/50 backdrop-blur-sm rounded-xl border border-zinc-700/50 p-4 mb-4 flex-shrink-0"
+        >
+          <div className="flex flex-col lg:flex-row gap-3 items-center justify-between">
+            {/* Búsqueda */}
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 h-4 w-4" />
+              <input
+                type="text"
+                placeholder="Buscar denuncias..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-zinc-700/50 border border-zinc-600 rounded-lg text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
+              />
             </div>
 
-            {/* Modal de edición */}
-            {editModal.open && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-                    <div className="bg-zinc-900 rounded-lg p-6 w-full max-w-md relative">
-                        <button
-                            className="absolute top-2 right-2 text-zinc-400 hover:text-red-400"
-                            onClick={() => setEditModal({open: false, denuncia: null})}
-                        >
-                            <X />
-                        </button>
-                        <h2 className="text-lg font-bold mb-4 text-white">Editar denuncia</h2>
-                        <form
-                            className="flex flex-col gap-3"
-                            onSubmit={e => { e.preventDefault(); handleSaveEdit(); }}
-                        >
-                            <input
-                                className="p-2 rounded bg-zinc-800 border border-zinc-700 text-white"
-                                placeholder="Título"
-                                value={editForm.title}
-                                onChange={e => setEditForm({...editForm, title: e.target.value})}
-                                required
-                            />
-                            <input
-                                className="p-2 rounded bg-zinc-800 border border-zinc-700 text-white"
-                                placeholder="Tipo de delito"
-                                value={editForm.crimeType}
-                                onChange={e => setEditForm({...editForm, crimeType: e.target.value})}
-                                required
-                            />
-                            <textarea
-                                className="p-2 rounded bg-zinc-800 border border-zinc-700 text-white"
-                                placeholder="Descripción"
-                                value={editForm.description}
-                                onChange={e => setEditForm({...editForm, description: e.target.value})}
-                                required
-                            />
-                            {/* Mostrar la fecha actual como texto, no input */}
-                            <div className="p-2 rounded bg-zinc-800 border border-zinc-700 text-white">
-                                Fecha: {editForm.date}
-                            </div>
-                            <input
-                                className="p-2 rounded bg-zinc-800 border border-zinc-700 text-white"
-                                placeholder="Ubicación"
-                                value={editForm.location}
-                                onChange={e => setEditForm({...editForm, location: e.target.value})}
-                                required
-                            />
-                            <select
-                                className="p-2 rounded bg-zinc-800 border border-zinc-700 text-white"
-                                value={editForm.status}
-                                onChange={e => setEditForm({...editForm, status: e.target.value})}
-                                required
-                            >
-                                {ESTADOS.filter(e => e !== "Todos").map(e => (
-                                    <option key={e} value={e.toLowerCase()}>{e}</option>
-                                ))}
-                            </select>
-                            <button
-                                type="submit"
-                                className="mt-2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 rounded flex items-center justify-center gap-2 disabled:opacity-60"
-                                disabled={saving}
-                            >
-                                {saving ? (
-                                    <LoaderCircle className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <Check className="w-4 h-4" />
-                                )}
-                                Guardar cambios
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            )}
+            {/* Filtros */}
+            <div className="flex gap-2 flex-wrap">
+              <select
+                value={selectedFilter}
+                onChange={(e) => setSelectedFilter(e.target.value)}
+                className="px-3 py-2 bg-zinc-700/50 border border-zinc-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
+              >
+                <option value="todas">Todos los estados</option>
+                <option value="pendiente">Pendiente</option>
+                <option value="en_proceso">En Proceso</option>
+                <option value="resuelta">Resuelta</option>
+                <option value="rechazada">Rechazada</option>
+              </select>
 
-            {/* Modal de eliminar */}
-            {deleteModal.open && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-                    <div className="bg-zinc-900 rounded-lg p-6 w-full max-w-sm relative">
-                        <button
-                            className="absolute top-2 right-2 text-zinc-400 hover:text-red-400"
-                            onClick={() => setDeleteModal({open: false, denuncia: null})}
-                        >
-                            <X />
-                        </button>
-                        <h2 className="text-lg font-bold mb-4 text-white">Eliminar denuncia</h2>
-                        <p className="mb-6 text-zinc-300">
-                            ¿Estás seguro de que deseas eliminar la denuncia <span className="font-bold">{deleteModal.denuncia?.titulo || deleteModal.denuncia?.title}</span>?
-                        </p>
-                        <div className="flex gap-3">
-                            <button
-                                className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded flex-1 disabled:opacity-60 flex items-center justify-center gap-2"
-                                onClick={handleConfirmDelete}
-                                disabled={deleting}
-                            >
-                                {deleting ? (
-                                    <LoaderCircle className="w-4 h-4 animate-spin" />
-                                ) : null}
-                                Sí, eliminar
-                            </button>
-                            <button
-                                className="bg-zinc-700 hover:bg-zinc-600 text-white font-bold py-2 px-4 rounded flex-1"
-                                onClick={() => setDeleteModal({open: false, denuncia: null})}
-                            >
-                                Cancelar
-                            </button>
+              <select
+                value={selectedTipo}
+                onChange={(e) => setSelectedTipo(e.target.value)}
+                className="px-3 py-2 bg-zinc-700/50 border border-zinc-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
+              >
+                <option value="todos">Todos los tipos</option>
+                {FALTAS_ADMINISTRATIVAS.map(tipo => (
+                  <option key={tipo} value={tipo}>{getTipoLabel(tipo)}</option>
+                ))}
+              </select>
+
+              <button
+                onClick={() => setShowModal(true)}
+                className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg font-semibold flex items-center gap-2 hover:from-red-700 hover:to-red-800 transition-all duration-200 text-sm"
+              >
+                <Plus className="h-4 w-4" />
+                Nueva Denuncia
+              </button>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Lista de denuncias */}
+        <div className="flex-1 overflow-hidden">
+          <div className="h-full overflow-y-auto pr-2">
+            <div className="space-y-3">
+              <AnimatePresence>
+                {filteredDenuncias.map((denuncia) => (
+                  <motion.div
+                    key={denuncia.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    className="bg-zinc-800/50 backdrop-blur-sm rounded-xl border border-zinc-700/50 p-4 hover:border-zinc-600 transition-all duration-200"
+                  >
+                    <div className="flex justify-between items-start gap-4">
+                      {/* Contenido principal */}
+                      <div className="flex-1 min-w-0">
+                        {/* Header con título y estado */}
+                        <div className="flex items-start justify-between gap-3 mb-3">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-lg font-semibold text-white mb-1 truncate">
+                              {denuncia.titulo}
+                            </h3>
+                          </div>
+                          <div className={`px-3 py-1 rounded-full border text-xs font-medium flex items-center gap-1 whitespace-nowrap ${getEstadoColor(denuncia.estado)}`}>
+                            {getEstadoIcon(denuncia.estado)}
+                            {denuncia.estado.replace('_', ' ').toUpperCase()}
+                          </div>
                         </div>
+
+                        {/* Descripción */}
+                        <p className="text-zinc-300 text-sm mb-3 overflow-hidden" style={{
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical'
+                        }}>
+                          {denuncia.descripcion}
+                        </p>
+
+                        {/* Metadata */}
+                        <div className="flex flex-wrap gap-4 text-xs text-zinc-400">
+                          <div className="flex items-center gap-1">
+                            <FileText className="h-3 w-3 flex-shrink-0" />
+                            <span>{getTipoLabel(denuncia.tipo)}</span>
+                          </div>
+                          {denuncia.ubicacion && (
+                            <div className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3 flex-shrink-0" />
+                              <span className="truncate max-w-[120px]">{denuncia.ubicacion}</span>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3 flex-shrink-0" />
+                            <span>{formatDate(denuncia.fechaCreacion)}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <User className="h-3 w-3 flex-shrink-0" />
+                            <span>{denuncia.anonima ? 'Anónimo' : 'Usuario registrado'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Botón de acción */}
+                      <div className="flex-shrink-0">
+                        <button
+                          onClick={() => {
+                            setSelectedDenuncia(denuncia);
+                            setShowDetailModal(true);
+                          }}
+                          className="px-3 py-2 bg-zinc-700/50 text-white rounded-lg flex items-center gap-2 hover:bg-zinc-600/50 transition-colors text-sm"
+                        >
+                          <Eye className="h-4 w-4" />
+                          Ver Detalles
+                        </button>
+                      </div>
                     </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+
+              {filteredDenuncias.length === 0 && !loading && (
+                <div className="text-center py-8">
+                  <AlertCircle className="h-8 w-8 text-zinc-500 mx-auto mb-3" />
+                  {denuncias.length === 0 ? (
+                    <>
+                      <p className="text-zinc-400 text-base">No hay denuncias en tu comunidad</p>
+                      <p className="text-zinc-500 text-sm">Sé el primero en crear una denuncia para tu comunidad</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-zinc-400 text-base">No se encontraron denuncias</p>
+                      <p className="text-zinc-500 text-sm">Intenta ajustar los filtros de búsqueda</p>
+                    </>
+                  )}
                 </div>
-            )}
-        </section>
-    );
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Modal para crear denuncia */}
+        <AnimatePresence>
+          {showModal && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="bg-zinc-800 rounded-xl border border-zinc-700 p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+              >
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold text-white">Nueva Denuncia</h2>
+                  <button
+                    onClick={() => setShowModal(false)}
+                    className="text-zinc-400 hover:text-white transition-colors"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">
+                      Título de la denuncia *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.titulo}
+                      onChange={(e) => setFormData({...formData, titulo: e.target.value})}
+                      className="w-full px-4 py-2 bg-zinc-700/50 border border-zinc-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                      placeholder="Describe brevemente el problema"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">
+                      Tipo de denuncia *
+                    </label>
+                    <select
+                      required
+                      value={formData.tipo}
+                      onChange={(e) => setFormData({...formData, tipo: e.target.value as FaltaAdministrativa})}
+                      className="w-full px-4 py-2 bg-zinc-700/50 border border-zinc-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                    >
+                      {FALTAS_ADMINISTRATIVAS.map(tipo => (
+                        <option key={tipo} value={tipo}>{getTipoLabel(tipo)}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">
+                      Descripción detallada *
+                    </label>
+                    <textarea
+                      required
+                      rows={4}
+                      value={formData.descripcion}
+                      onChange={(e) => setFormData({...formData, descripcion: e.target.value})}
+                      className="w-full px-4 py-2 bg-zinc-700/50 border border-zinc-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                      placeholder="Describe los detalles de la situación"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">
+                      Ubicación
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.ubicacion}
+                      onChange={(e) => setFormData({...formData, ubicacion: e.target.value})}
+                      className="w-full px-4 py-2 bg-zinc-700/50 border border-zinc-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                      placeholder="Dirección o referencia del lugar"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">
+                      Evidencias (opcional)
+                    </label>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*,video/*,.pdf"
+                      onChange={(e) => setFormData({...formData, evidencias: Array.from(e.target.files || [])})}
+                      className="w-full px-4 py-2 bg-zinc-700/50 border border-zinc-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                    <p className="text-xs text-zinc-500 mt-1">
+                      Puedes subir fotos, videos o documentos como evidencia
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="anonima"
+                      checked={formData.anonima}
+                      onChange={(e) => setFormData({...formData, anonima: e.target.checked})}
+                      className="rounded bg-zinc-700 border-zinc-600 text-red-500 focus:ring-red-500"
+                    />
+                    <label htmlFor="anonima" className="text-sm text-zinc-300">
+                      Realizar denuncia anónima
+                    </label>
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowModal(false)}
+                      className="flex-1 px-4 py-2 bg-zinc-700 text-white rounded-lg hover:bg-zinc-600 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="flex-1 px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg font-semibold hover:from-red-700 hover:to-red-800 transition-all duration-200 disabled:opacity-50"
+                    >
+                      {submitting ? 'Enviando...' : 'Crear Denuncia'}
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Modal de detalles */}
+        <AnimatePresence>
+          {showDetailModal && selectedDenuncia && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="bg-zinc-800 rounded-xl border border-zinc-700 p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+              >
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold text-white">Detalles de la Denuncia</h2>
+                  <button
+                    onClick={() => setShowDetailModal(false)}
+                    className="text-zinc-400 hover:text-white transition-colors"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-2">{selectedDenuncia.titulo}</h3>
+                    <div className={`inline-flex px-3 py-1 rounded-full border text-sm font-medium items-center gap-1 ${getEstadoColor(selectedDenuncia.estado)}`}>
+                      {getEstadoIcon(selectedDenuncia.estado)}
+                      {selectedDenuncia.estado.replace('_', ' ').toUpperCase()}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-medium text-zinc-300 mb-2">Descripción</h4>
+                    <p className="text-zinc-300">{selectedDenuncia.descripcion}</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <h4 className="text-sm font-medium text-zinc-300 mb-1">Tipo</h4>
+                      <p className="text-white">{getTipoLabel(selectedDenuncia.tipo)}</p>
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-medium text-zinc-300 mb-1">Fecha</h4>
+                      <p className="text-white">{formatDate(selectedDenuncia.fechaCreacion)}</p>
+                    </div>
+                  </div>
+
+                  {selectedDenuncia.ubicacion && (
+                    <div>
+                      <h4 className="text-sm font-medium text-zinc-300 mb-1">Ubicación</h4>
+                      <p className="text-white">{selectedDenuncia.ubicacion}</p>
+                    </div>
+                  )}
+
+                  <div>
+                    <h4 className="text-sm font-medium text-zinc-300 mb-1">Denunciante</h4>
+                    <p className="text-white">{selectedDenuncia.anonima ? 'Anónimo' : 'Usuario registrado'}</p>
+                  </div>
+
+                  {selectedDenuncia.evidenciaUrls && selectedDenuncia.evidenciaUrls.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-zinc-300 mb-2">Evidencias</h4>
+                      <div className="grid grid-cols-2 gap-2">
+                        {selectedDenuncia.evidenciaUrls.map((url, index) => (
+                          <img
+                            key={index}
+                            src={url}
+                            alt={`Evidencia ${index + 1}`}
+                            className="w-full h-32 object-cover rounded-lg border border-zinc-600"
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
 };
 
 export default Denuncias;

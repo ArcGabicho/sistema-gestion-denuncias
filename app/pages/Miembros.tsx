@@ -1,4 +1,4 @@
-const Inicio = () => {
+const Miembros = () => {
     return (
         <>
         
@@ -6,4 +6,4 @@ const Inicio = () => {
     )
 }
 
-export default Inicio;
+export default Miembros

@@ -10,6 +10,7 @@ export const navItems = [
   { label: "Funciones", href: "#Funciones" },
   { label: "Misión", href: "#Mision" },
   { label: "Miembros", href: "#Miembros" },
+  { label: "FAQs", href: "#FAQs" },
 ];
 
 export const features = [
@@ -29,7 +30,7 @@ export const features = [
     icon: <Database />,
     text: "Panel de Análisis de Datos",
     description:
-      "Integración con bases de la PNP para verificar antecedentes y evitar denuncias duplicadas automáticamente.",
+      "Integración de IA para análisis de datos y generación de informes.",
   },
   {
     icon: <ChartColumn />,
@@ -41,7 +42,7 @@ export const features = [
     icon: <Users />,
     text: "Viralizar Denuncias",
     description:
-      "Bot automático que publica denuncias validadas en redes sociales para movilizar apoyo ciudadano contra corrupción.",
+      "IA que publica denuncias validadas en redes sociales para movilizar apoyo ciudadano contra delitos.",
   },
   {
     icon: <CircleAlert />,

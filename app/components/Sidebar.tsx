@@ -1,17 +1,20 @@
-import { LayoutDashboard, FileText, Users, BarChart2, Brain, Loader2, LogOut } from 'lucide-react';
+import { LayoutDashboard, Settings, FileText, BarChart2, Brain, Loader2, LogOut, Database, Users } from 'lucide-react';
 import { signOut } from "firebase/auth";
-import { auth } from '../firebase/firebase.config';
+import { auth } from '@/app/utils/firebase';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+
 import Image from 'next/image';
 import toast from 'react-hot-toast';
 
 const navItems = [
     { label: 'Inicio', href: 'Inicio', icon: LayoutDashboard },
+    { label: 'Miembros', href: 'Miembros', icon: Users },
     { label: 'Denuncias', href: 'Denuncias', icon: FileText },
-    { label: 'Denunciantes', href: 'Denunciantes', icon: Users },
-    { label: 'Reportes', href: 'Reportes', icon: BarChart2 },
-    { label: 'IA', href: 'IA', icon: Brain },
+    { label: 'Análisis de Datos', href: 'Datos', icon: Database },
+    { label: 'Reportes IA', href: 'Reportes', icon: BarChart2 },
+    { label: 'Asistente IA', href: 'IA', icon: Brain },
+    { label: 'Configuración', href: 'Configuracion', icon: Settings },
 ];
 
 type SidebarProps = {

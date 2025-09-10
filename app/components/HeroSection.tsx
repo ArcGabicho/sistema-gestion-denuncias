@@ -4,17 +4,17 @@ const HeroSection = () => {
   return (
     <div id="Inicio" className="flex flex-col items-center mt-6 lg:mt-20">
       <h1 className="text-4xl sm:text-6xl lg:text-7xl text-center tracking-wide">
-        Denuncia las injusticias con
+        Aporta al Orden con
         <span className="bg-gradient-to-r from-red-500 to-red-800 text-transparent bg-clip-text">
           {" "}
           Perú Seguro
         </span>
       </h1>
       <p className="mt-10 text-lg text-center text-neutral-500 max-w-4xl">
-        Perú Seguro es una plataforma que permite a los ciudadanos reportar
-        injusticias y delitos en tiempo real. Con nuestra aplicación, puedes
+        Perú Seguro es una plataforma que permite a juntas vecinales reportar
+        faltas administrativas y delitos en tiempo real. Con nuestra aplicación, puedes
         enviar denuncias de manera rápida y sencilla, y ayudar a crear un entorno
-        más seguro para todos. Únete a nuestra comunidad y sé parte del cambio.
+        más seguro para todos. Ayuda a tu comunidad y sé parte del cambio.
 
       </p>
       <div className="flex justify-center my-10">
@@ -24,8 +24,8 @@ const HeroSection = () => {
         >
           Denunciar
         </a>
-        <a href="#" className="py-3 px-4 mx-3 rounded-md border">
-          Guía de uso
+        <a href="/portal" className="py-3 px-4 mx-3 rounded-md border">
+          Portal de Denuncias
         </a>
       </div>
       <div className="flex flex-col md:flex-row mt-10 justify-center">
