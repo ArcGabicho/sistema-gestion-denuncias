@@ -341,7 +341,8 @@ export const actualizarDenuncia = async (
     const docRef = doc(db, DENUNCIAS_COLLECTION, id);
     
     // Convertir fechas si es necesario
-    const datosActualizacion: Record<string, unknown> = { ...actualizaciones };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const datosActualizacion: Record<string, any> = { ...actualizaciones };
     
     if (actualizaciones.fechaIncidente) {
       datosActualizacion.fechaIncidente = typeof actualizaciones.fechaIncidente === 'string'
