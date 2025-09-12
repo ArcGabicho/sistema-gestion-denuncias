@@ -21,6 +21,7 @@ import {
     Download,
     UserPlus
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import Image from "next/image";
 import toast from 'react-hot-toast';
 
@@ -41,40 +42,82 @@ const Miembros = () => {
                 return;
             }
 
-            // Obtener datos del usuario actual
-            const userDoc = await getDoc(doc(db, "users", user.uid));
-            if (userDoc.exists()) {
-                const userData = { id: userDoc.id, ...userDoc.data() } as User;
-                setCurrentUser(userData);
+            try {
+                // Obtener datos del usuario actual
+                const userDoc = await getDoc(doc(db, "users", user.uid));
+                if (userDoc.exists()) {
+                    const userData = { id: userDoc.id, ...userDoc.data() } as User;
+                    setCurrentUser(userData);
 
-                // Obtener datos de la comunidad
-                if (userData.comunidadId) {
-                    const comunidadDoc = await getDoc(doc(db, "comunidades", userData.comunidadId));
-                    if (comunidadDoc.exists()) {
-                        const comunidadData = { id: comunidadDoc.id, ...comunidadDoc.data() } as Comunidad;
-                        setComunidad(comunidadData);
-                        await loadMiembros(userData.comunidadId);
+                    // Obtener datos de la comunidad
+                    if (userData.comunidadId) {
+                        const comunidadDoc = await getDoc(doc(db, "comunidades", userData.comunidadId));
+                        if (comunidadDoc.exists()) {
+                            const comunidadData = { id: comunidadDoc.id, ...comunidadDoc.data() } as Comunidad;
+                            setComunidad(comunidadData);
+
+                            // Cargar los miembros de la comunidad
+                            await loadMiembros(userData.comunidadId);
+                        }
                     }
                 }
+            } catch (error) {
+                console.error("Error cargando datos:", error);
+                toast.error("Error al cargar los datos");
             }
+
             setLoading(false);
         });
 
         return () => unsubscribe();
     }, []);
 
+    const handleInviteMember = () => {
+        if (!comunidad?.invitationCode) {
+            toast.error("No se encontró el código de la comunidad");
+            return;
+        }
+        const mensaje = `¡Únete a nuestra comunidad! Usa el código: ${comunidad.invitationCode}`;
+        const url = `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
+        window.open(url, "_blank");
+    };
+
+    const handleExportMembers = () => {
+        if (miembros.length === 0) {
+            toast.error("No hay miembros para exportar");
+            return;
+        }
+        const data = miembros.map(m => ({
+            Nombre: `${m.name} ${m.lastname}`,
+            Email: m.email,
+            Teléfono: m.phone || "",
+            Rol: m.role === "admin" ? "Administrador" : "Miembro",
+            Estado: m.isActive ? "Activo" : "Inactivo",
+            Registro: formatDate(m.createdAt)
+        }));
+        const worksheet = XLSX.utils.json_to_sheet(data);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Miembros");
+        XLSX.writeFile(workbook, "miembros_comunidad.xlsx");
+        toast.success("Miembros exportados correctamente");
+    };
+
     const loadMiembros = async (comunidadId: string) => {
         try {
+            // Consulta a Firestore para obtener los usuarios de la comunidad
             const miembrosQuery = query(
                 collection(db, "users"),
-                where("comunidadId", "==", comunidadId)
+                where("comunidadId", "==", comunidadId) // Filtrar por comunidadId
             );
             const miembrosSnapshot = await getDocs(miembrosQuery);
+
+            // Mapear los datos de los usuarios
             const miembrosData: User[] = miembrosSnapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
             })) as User[];
 
+            // Actualizar el estado con los miembros obtenidos
             setMiembros(miembrosData);
         } catch (error) {
             console.error("Error cargando miembros:", error);
@@ -182,16 +225,18 @@ const Miembros = () => {
                             {comunidad?.nombre} - {miembros.length} miembros registrados
                         </p>
                     </div>
-                    <div className="flex gap-3">
-                        <button className="flex items-center px-4 py-2 bg-zinc-800/50 backdrop-blur-sm rounded-lg hover:bg-zinc-700/50 transition-colors border border-zinc-700/50">
-                            <UserPlus className="h-4 w-4 mr-2" />
-                            Invitar Miembro
-                        </button>
-                        <button className="flex items-center px-4 py-2 bg-zinc-800/50 backdrop-blur-sm rounded-lg hover:bg-zinc-700/50 transition-colors border border-zinc-700/50">
-                            <Download className="h-4 w-4 mr-2" />
-                            Exportar
-                        </button>
-                    </div>
+                    {currentUser?.role === 'admin' && (
+                        <div className="flex gap-3">
+                            <button onClick={handleInviteMember} className="flex items-center px-4 py-2 bg-zinc-800/50 backdrop-blur-sm rounded-lg hover:bg-zinc-700/50 transition-colors border border-zinc-700/50">
+                                <UserPlus className="h-4 w-4 mr-2" />
+                                Invitar Miembro
+                            </button>
+                            <button onClick={handleExportMembers} className="flex items-center px-4 py-2 bg-zinc-800/50 backdrop-blur-sm rounded-lg hover:bg-zinc-700/50 transition-colors border border-zinc-700/50">
+                                <Download className="h-4 w-4 mr-2" />
+                                Exportar
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -366,16 +411,16 @@ const Miembros = () => {
 
                                     {/* Acciones */}
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                        <div className="relative">
-                                            <button
-                                                onClick={() => setShowActions(showActions === miembro.id ? null : miembro.id)}
-                                                className="text-zinc-400 hover:text-zinc-300 transition-colors"
-                                                disabled={currentUser?.role !== 'admin'}
-                                            >
-                                                <MoreVertical className="h-5 w-5" />
-                                            </button>
+                                        {currentUser?.role === 'admin' ? (
+                                            <div className="relative">
+                                                <button
+                                                    onClick={() => setShowActions(showActions === miembro.id ? null : miembro.id)}
+                                                    className="text-zinc-400 hover:text-zinc-300 transition-colors"
+                                                >
+                                                    <MoreVertical className="h-5 w-5" />
+                                                </button>
 
-                                            {showActions === miembro.id && currentUser?.role === 'admin' && (
+                                                {showActions === miembro.id && (
                                                 <div className="absolute right-0 top-8 bg-zinc-700/90 backdrop-blur-sm rounded-lg shadow-xl border border-zinc-600/50 py-1 z-10 min-w-[180px]">
                                                     <button
                                                         onClick={() => handleChangeRole(miembro.id, miembro.role === 'admin' ? 'member' : 'admin')}
@@ -408,6 +453,9 @@ const Miembros = () => {
                                                 </div>
                                             )}
                                         </div>
+                                        ) : (
+                                            <span className="text-zinc-500 text-sm">-</span>
+                                        )}
                                     </td>
                                 </tr>
                             ))}

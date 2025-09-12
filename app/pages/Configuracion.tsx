@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   User, 
@@ -18,8 +18,12 @@ import {
   Key
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { getAuth, onAuthStateChanged, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { db } from '@/app/utils/firebase';
 
 interface UserProfile {
+  id?: string;
   avatarUrl: string;
   email: string;
   isActive: boolean;
@@ -27,20 +31,24 @@ interface UserProfile {
   name: string;
   phone: string;
   role: string;
+  comunidadId?: string;
+  createdAt?: { toDate?: () => Date; seconds?: number };
+  updatedAt?: { toDate?: () => Date; seconds?: number };
 }
 
 const Configuracion = () => {
-  // Estado inicial del usuario (simulado)
+  // Estado inicial del usuario
   const [userProfile, setUserProfile] = useState<UserProfile>({
     avatarUrl: "",
-    email: "juan_bautista543@gmail.com",
+    email: "",
     isActive: true,
-    lastname: "Bautista Quintalla",
-    name: "Juan Teodoro",
-    phone: "997737799",
-    role: "admin"
+    lastname: "",
+    name: "",
+    phone: "",
+    role: "member"
   });
 
+  const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [tempProfile, setTempProfile] = useState<UserProfile>(userProfile);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
@@ -55,6 +63,34 @@ const Configuracion = () => {
     confirm: false
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Cargar datos del usuario autenticado
+  useEffect(() => {
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // Obtener datos del usuario desde Firestore
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        if (userDoc.exists()) {
+          const userData = { id: userDoc.id, ...userDoc.data() } as UserProfile;
+          setUserProfile(userData);
+          setTempProfile(userData);
+        }
+      } catch (error) {
+        console.error("Error cargando datos del usuario:", error);
+        toast.error("Error al cargar los datos del usuario");
+      }
+
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const handleInputChange = (field: keyof UserProfile, value: string | boolean) => {
     setTempProfile(prev => ({
@@ -80,7 +116,23 @@ const Configuracion = () => {
 
   const handleSaveProfile = async () => {
     try {
-      // Aquí iría la lógica para guardar en la base de datos
+      const auth = getAuth();
+      const user = auth.currentUser;
+      
+      if (!user) {
+        toast.error('No hay usuario autenticado');
+        return;
+      }
+
+      // Actualizar datos en Firestore
+      await updateDoc(doc(db, "users", user.uid), {
+        name: tempProfile.name,
+        lastname: tempProfile.lastname,
+        phone: tempProfile.phone,
+        avatarUrl: tempProfile.avatarUrl,
+        updatedAt: new Date()
+      });
+
       setUserProfile(tempProfile);
       setIsEditing(false);
       toast.success('Perfil actualizado correctamente');
@@ -106,13 +158,39 @@ const Configuracion = () => {
     }
     
     try {
-      // Aquí iría la lógica para cambiar la contraseña
+      const auth = getAuth();
+      const user = auth.currentUser;
+      
+      if (!user || !user.email) {
+        toast.error('No hay usuario autenticado');
+        return;
+      }
+
+      // Reautenticar al usuario con su contraseña actual
+      const credential = EmailAuthProvider.credential(user.email, passwords.current);
+      await reauthenticateWithCredential(user, credential);
+
+      // Actualizar contraseña
+      await updatePassword(user, passwords.new);
+      
       toast.success('Contraseña actualizada correctamente');
       setPasswords({ current: '', new: '', confirm: '' });
       setShowPasswordChange(false);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error al cambiar contraseña:', error);
-      toast.error('Error al cambiar la contraseña');
+      
+      if (error && typeof error === 'object' && 'code' in error) {
+        const firebaseError = error as { code: string };
+        if (firebaseError.code === 'auth/wrong-password') {
+          toast.error('La contraseña actual es incorrecta');
+        } else if (firebaseError.code === 'auth/weak-password') {
+          toast.error('La nueva contraseña es muy débil');
+        } else {
+          toast.error('Error al cambiar la contraseña');
+        }
+      } else {
+        toast.error('Error al cambiar la contraseña');
+      }
     }
   };
 
@@ -120,6 +198,7 @@ const Configuracion = () => {
     const roles: Record<string, string> = {
       admin: 'Administrador',
       moderator: 'Moderador',
+      member: 'Miembro',
       user: 'Usuario'
     };
     return roles[role] || role;
@@ -129,10 +208,31 @@ const Configuracion = () => {
     const colors: Record<string, string> = {
       admin: 'bg-red-500/20 text-red-300 border border-red-500/30',
       moderator: 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30',
-      user: 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+      member: 'bg-blue-500/20 text-blue-300 border border-blue-500/30',
+      user: 'bg-green-500/20 text-green-300 border border-green-500/30'
     };
     return colors[role] || 'bg-zinc-500/20 text-zinc-300 border border-zinc-500/30';
   };
+
+  // Función para formatear fechas
+  const formatDate = (timestamp: { toDate?: () => Date; seconds?: number } | undefined) => {
+    if (!timestamp) return "No disponible";
+    const date = timestamp.toDate ? timestamp.toDate() : new Date((timestamp.seconds || 0) * 1000);
+    return date.toLocaleDateString("es-ES", {
+      year: "numeric",
+      month: "long",
+      day: "numeric"
+    });
+  };
+
+  // Mostrar loading mientras se cargan los datos
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px] bg-zinc-900">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
@@ -465,6 +565,18 @@ const Configuracion = () => {
                     Sí
                   </span>
                 </div>
+                {userProfile.createdAt && (
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Miembro desde:</span>
+                    <span className="text-white">{formatDate(userProfile.createdAt)}</span>
+                  </div>
+                )}
+                {userProfile.comunidadId && (
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">ID Comunidad:</span>
+                    <span className="text-zinc-300 text-xs font-mono">{userProfile.comunidadId.slice(0, 8)}...</span>
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>

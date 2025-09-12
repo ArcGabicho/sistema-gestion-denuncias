@@ -12,10 +12,8 @@ import {
     Bell, 
     FileText, 
     Users, 
-    BarChart3, 
     CheckCircle, 
-    Clock,
-    TrendingUp
+    Clock
 } from "lucide-react";
 
 interface DenunciaReciente {
@@ -79,9 +77,9 @@ const Inicio = () => {
 
     const loadDashboardStats = async (comunidadId: string) => {
         try {
-            // Obtener total de denuncias
+            // Obtener total de denuncias internas de la comunidad
             const denunciasQuery = query(
-                collection(db, "denuncias"),
+                collection(db, "denuncias_internas"),
                 where("comunidadId", "==", comunidadId)
             );
             const denunciasSnapshot = await getDocs(denunciasQuery);
@@ -90,19 +88,9 @@ const Inicio = () => {
             // Contar denuncias por estado
             let pendientes = 0;
             let resueltas = 0;
-            const denunciasData: DenunciaReciente[] = [];
 
             denunciasSnapshot.forEach((doc) => {
                 const data = doc.data();
-                denunciasData.push({ 
-                    id: doc.id, 
-                    titulo: data.titulo || "Sin título",
-                    descripcion: data.descripcion || "Sin descripción",
-                    estado: data.estado || "pendiente",
-                    createdAt: data.createdAt,
-                    comunidadId: data.comunidadId
-                });
-                
                 if (data.estado === "pendiente") {
                     pendientes++;
                 } else if (data.estado === "resuelta") {
@@ -110,38 +98,80 @@ const Inicio = () => {
                 }
             });
 
-            // Obtener denuncias recientes (últimas 5)
+            // Obtener denuncias del día actual
+            const hoy = new Date();
+            const inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+            const finDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1);
+
             const recientesQuery = query(
-                collection(db, "denuncias"),
+                collection(db, "denuncias_internas"),
                 where("comunidadId", "==", comunidadId),
-                orderBy("createdAt", "desc"),
-                limit(5)
+                where("fechaCreacion", ">=", Timestamp.fromDate(inicioDia)),
+                where("fechaCreacion", "<", Timestamp.fromDate(finDia)),
+                orderBy("fechaCreacion", "desc")
             );
-            const recientesSnapshot = await getDocs(recientesQuery);
-            const denunciasRecientes: DenunciaReciente[] = recientesSnapshot.docs.map(doc => ({
-                id: doc.id,
-                titulo: doc.data().titulo || "Sin título",
-                descripcion: doc.data().descripcion || "Sin descripción",
-                estado: doc.data().estado || "pendiente",
-                createdAt: doc.data().createdAt,
-                comunidadId: doc.data().comunidadId
-            }));
+            
+            try {
+                const recientesSnapshot = await getDocs(recientesQuery);
+                const denunciasRecientes: DenunciaReciente[] = recientesSnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    titulo: doc.data().titulo || "Sin título",
+                    descripcion: doc.data().descripcion || "Sin descripción",
+                    estado: doc.data().estado || "pendiente",
+                    createdAt: doc.data().fechaCreacion,
+                    comunidadId: doc.data().comunidadId
+                }));
 
-            // Obtener total de miembros
-            const miembrosQuery = query(
-                collection(db, "users"),
-                where("comunidadId", "==", comunidadId)
-            );
-            const miembrosSnapshot = await getDocs(miembrosQuery);
-            const totalMiembros = miembrosSnapshot.size;
+                // Obtener total de miembros de la comunidad
+                const miembrosQuery = query(
+                    collection(db, "users"),
+                    where("comunidadId", "==", comunidadId)
+                );
+                const miembrosSnapshot = await getDocs(miembrosQuery);
+                const totalMiembros = miembrosSnapshot.size;
 
-            setStats({
-                totalDenuncias,
-                denunciasPendientes: pendientes,
-                denunciasResueltas: resueltas,
-                totalMiembros,
-                denunciasRecientes
-            });
+                setStats({
+                    totalDenuncias,
+                    denunciasPendientes: pendientes,
+                    denunciasResueltas: resueltas,
+                    totalMiembros,
+                    denunciasRecientes
+                });
+            } catch {
+                console.log("Índice compuesto no disponible, mostrando denuncias sin filtro de fecha");
+                // Si no hay índice, obtener las últimas 5 denuncias sin filtro de fecha
+                const fallbackQuery = query(
+                    collection(db, "denuncias_internas"),
+                    where("comunidadId", "==", comunidadId),
+                    orderBy("fechaCreacion", "desc"),
+                    limit(5)
+                );
+                const fallbackSnapshot = await getDocs(fallbackQuery);
+                const denunciasRecientes: DenunciaReciente[] = fallbackSnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    titulo: doc.data().titulo || "Sin título",
+                    descripcion: doc.data().descripcion || "Sin descripción",
+                    estado: doc.data().estado || "pendiente",
+                    createdAt: doc.data().fechaCreacion,
+                    comunidadId: doc.data().comunidadId
+                }));
+
+                // Obtener total de miembros de la comunidad
+                const miembrosQuery = query(
+                    collection(db, "users"),
+                    where("comunidadId", "==", comunidadId)
+                );
+                const miembrosSnapshot = await getDocs(miembrosQuery);
+                const totalMiembros = miembrosSnapshot.size;
+
+                setStats({
+                    totalDenuncias,
+                    denunciasPendientes: pendientes,
+                    denunciasResueltas: resueltas,
+                    totalMiembros,
+                    denunciasRecientes
+                });
+            }
 
         } catch (error) {
             console.error("Error cargando estadísticas:", error);
@@ -182,7 +212,7 @@ const Inicio = () => {
     }
 
     return (
-        <div className="p-6 space-y-6 min-h-screen bg-zinc-900">
+        <div className="p-6 space-y-6 h-full bg-zinc-900 rounded-xl">
             {/* Header principal con información de la comunidad */}
             <div className="bg-gradient-to-r from-red-600 to-red-800 rounded-xl p-6 text-white border border-red-700/50 shadow-xl backdrop-blur-sm">
                 <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
@@ -235,122 +265,109 @@ const Inicio = () => {
                 </div>
             </div>
 
-            {/* Estadísticas principales - Más compactas */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-zinc-800/50 backdrop-blur-sm rounded-lg shadow-lg p-4 border border-zinc-700/50 border-l-4 border-l-red-500 hover:shadow-xl transition-all duration-300 hover:scale-105">
-                    <div className="text-center">
-                        <div className="bg-red-600/20 p-3 rounded-full w-12 h-12 mx-auto mb-3 flex items-center justify-center border border-red-500/30">
-                            <FileText className="h-6 w-6 text-red-400" />
+
+
+            {/* Contenido principal */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Estadísticas detalladas - Izquierda */}
+                <div className="lg:col-span-1 space-y-4">
+                    <div className="bg-zinc-800/50 backdrop-blur-sm rounded-lg shadow-lg p-4 border border-zinc-700/50 border-l-4 border-l-red-500 hover:shadow-xl transition-all duration-300">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-2xl font-bold text-white mb-1">{stats.totalDenuncias}</p>
+                                <p className="text-zinc-300 text-sm font-medium">Total Denuncias</p>
+                            </div>
+                            <div className="bg-red-600/20 p-3 rounded-full border border-red-500/30">
+                                <FileText className="h-6 w-6 text-red-400" />
+                            </div>
                         </div>
-                        <p className="text-2xl font-bold text-white mb-1">{stats.totalDenuncias}</p>
-                        <p className="text-zinc-300 text-sm font-medium">Total Denuncias</p>
+                    </div>
+
+                    <div className="bg-zinc-800/50 backdrop-blur-sm rounded-lg shadow-lg p-4 border border-zinc-700/50 border-l-4 border-l-yellow-500 hover:shadow-xl transition-all duration-300">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-2xl font-bold text-white mb-1">{stats.denunciasPendientes}</p>
+                                <p className="text-zinc-300 text-sm font-medium">Pendientes</p>
+                            </div>
+                            <div className="bg-yellow-500/20 p-3 rounded-full border border-yellow-500/30">
+                                <Clock className="h-6 w-6 text-yellow-400" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-zinc-800/50 backdrop-blur-sm rounded-lg shadow-lg p-4 border border-zinc-700/50 border-l-4 border-l-green-500 hover:shadow-xl transition-all duration-300">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-2xl font-bold text-white mb-1">{stats.denunciasResueltas}</p>
+                                <p className="text-zinc-300 text-sm font-medium">Resueltas</p>
+                            </div>
+                            <div className="bg-green-500/20 p-3 rounded-full border border-green-500/30">
+                                <CheckCircle className="h-6 w-6 text-green-400" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-zinc-800/50 backdrop-blur-sm rounded-lg shadow-lg p-4 border border-zinc-700/50 border-l-4 border-l-blue-500 hover:shadow-xl transition-all duration-300">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-2xl font-bold text-white mb-1">{stats.totalMiembros}</p>
+                                <p className="text-zinc-300 text-sm font-medium">Miembros</p>
+                            </div>
+                            <div className="bg-blue-500/20 p-3 rounded-full border border-blue-500/30">
+                                <Users className="h-6 w-6 text-blue-400" />
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div className="bg-zinc-800/50 backdrop-blur-sm rounded-lg shadow-lg p-4 border border-zinc-700/50 border-l-4 border-l-yellow-500 hover:shadow-xl transition-all duration-300 hover:scale-105">
-                    <div className="text-center">
-                        <div className="bg-yellow-500/20 p-3 rounded-full w-12 h-12 mx-auto mb-3 flex items-center justify-center border border-yellow-500/30">
-                            <Clock className="h-6 w-6 text-yellow-400" />
+                {/* Denuncias recientes - Derecha */}
+                <div className="lg:col-span-2">
+                    <div className="bg-zinc-800/50 backdrop-blur-sm rounded-lg shadow-lg border border-zinc-700/50 h-full">
+                        <div className="p-4 border-b border-zinc-700/50">
+                            <h3 className="text-lg font-bold text-white flex items-center">
+                                <Bell className="h-5 w-5 text-red-400 mr-2" />
+                                Denuncias de Hoy
+                            </h3>
+                            <p className="text-zinc-400 text-sm mt-1">
+                                Denuncias internas reportadas el {new Date().toLocaleDateString('es-ES', { 
+                                    weekday: 'long', 
+                                    year: 'numeric', 
+                                    month: 'long', 
+                                    day: 'numeric' 
+                                })}
+                            </p>
                         </div>
-                        <p className="text-2xl font-bold text-white mb-1">{stats.denunciasPendientes}</p>
-                        <p className="text-zinc-300 text-sm font-medium">Pendientes</p>
-                    </div>
-                </div>
-
-                <div className="bg-zinc-800/50 backdrop-blur-sm rounded-lg shadow-lg p-4 border border-zinc-700/50 border-l-4 border-l-green-500 hover:shadow-xl transition-all duration-300 hover:scale-105">
-                    <div className="text-center">
-                        <div className="bg-green-500/20 p-3 rounded-full w-12 h-12 mx-auto mb-3 flex items-center justify-center border border-green-500/30">
-                            <CheckCircle className="h-6 w-6 text-green-400" />
-                        </div>
-                        <p className="text-2xl font-bold text-white mb-1">{stats.denunciasResueltas}</p>
-                        <p className="text-zinc-300 text-sm font-medium">Resueltas</p>
-                    </div>
-                </div>
-
-                <div className="bg-zinc-800/50 backdrop-blur-sm rounded-lg shadow-lg p-4 border border-zinc-700/50 border-l-4 border-l-red-600 hover:shadow-xl transition-all duration-300 hover:scale-105">
-                    <div className="text-center">
-                        <div className="bg-red-600/20 p-3 rounded-full w-12 h-12 mx-auto mb-3 flex items-center justify-center border border-red-500/30">
-                            <Users className="h-6 w-6 text-red-400" />
-                        </div>
-                        <p className="text-2xl font-bold text-white mb-1">{stats.totalMiembros}</p>
-                        <p className="text-zinc-300 text-sm font-medium">Miembros</p>
-                    </div>
-                </div>
-            </div>
-
-            {/* Contenido principal simplificado */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Denuncias recientes - Más simple */}
-                <div className="bg-zinc-800/50 backdrop-blur-sm rounded-lg shadow-lg border border-zinc-700/50">
-                    <div className="p-4 border-b border-zinc-700/50">
-                        <h3 className="text-lg font-bold text-white flex items-center">
-                            <Bell className="h-5 w-5 text-red-400 mr-2" />
-                            Actividad Reciente
-                        </h3>
-                    </div>
-                    <div className="p-4">
-                        {stats.denunciasRecientes.length > 0 ? (
-                            <div className="space-y-3">
-                                {stats.denunciasRecientes.slice(0, 3).map((denuncia) => (
-                                    <div key={denuncia.id} className="flex items-start space-x-3 p-3 bg-zinc-700/30 rounded-lg border border-zinc-600/50 hover:border-red-500/50 transition-colors">
-                                        <div className="flex-shrink-0">
-                                            <div className={`px-2 py-1 rounded-full text-xs font-bold ${getEstadoColor(denuncia.estado)}`}>
-                                                {denuncia.estado?.replace("_", " ").toUpperCase() || "PENDIENTE"}
+                        <div className="p-4">
+                            {stats.denunciasRecientes.length > 0 ? (
+                                <div className="space-y-3 overflow-y-auto max-h-[285px] pr-2 scrollbar-thin scrollbar-track-zinc-800/50 scrollbar-thumb-zinc-600/50 scrollbar-thumb-rounded-full hover:scrollbar-thumb-zinc-500/70">
+                                    {stats.denunciasRecientes.map((denuncia) => (
+                                        <div key={denuncia.id} className="flex items-start space-x-3 p-3 bg-zinc-700/30 rounded-lg border border-zinc-600/50 hover:border-red-500/50 transition-colors">
+                                            <div className="flex-shrink-0">
+                                                <div className={`px-2 py-1 rounded-full text-xs font-bold ${getEstadoColor(denuncia.estado)}`}>
+                                                    {denuncia.estado?.replace("_", " ").toUpperCase() || "PENDIENTE"}
+                                                </div>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-semibold text-white line-clamp-1">
+                                                    {denuncia.titulo || "Sin título"}
+                                                </p>
+                                                <p className="text-xs text-zinc-400 mt-1 line-clamp-2">
+                                                    {denuncia.descripcion || "Sin descripción"}
+                                                </p>
+                                                <p className="text-xs text-zinc-500 mt-1">
+                                                    {formatDate(denuncia.createdAt)}
+                                                </p>
                                             </div>
                                         </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-semibold text-white line-clamp-1">
-                                                {denuncia.titulo || "Sin título"}
-                                            </p>
-                                            <p className="text-xs text-zinc-400 mt-1">
-                                                {formatDate(denuncia.createdAt)}
-                                            </p>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="text-center py-8">
-                                <FileText className="h-12 w-12 text-zinc-500 mx-auto mb-3" />
-                                <p className="text-zinc-300 text-base">No hay denuncias recientes</p>
-                                <p className="text-zinc-400 text-sm mt-1">El sistema está listo para recibir denuncias</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Acciones rápidas mejoradas */}
-                <div className="bg-zinc-800/50 backdrop-blur-sm rounded-lg shadow-lg border border-zinc-700/50">
-                    <div className="p-4 border-b border-zinc-700/50">
-                        <h3 className="text-lg font-bold text-white flex items-center">
-                            <TrendingUp className="h-5 w-5 text-red-400 mr-2" />
-                            Acciones Rápidas
-                        </h3>
-                    </div>
-                    <div className="p-4 space-y-3">
-                        <button className="w-full flex items-center justify-center px-4 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 text-sm font-semibold border border-red-500/30">
-                            <FileText className="h-4 w-4 mr-2" />
-                            Ver Todas las Denuncias
-                        </button>
-                        <button className="w-full flex items-center justify-center px-4 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 text-sm font-semibold border border-green-500/30">
-                            <BarChart3 className="h-4 w-4 mr-2" />
-                            Generar Reporte
-                        </button>
-                        <button className="w-full flex items-center justify-center px-4 py-3 bg-gradient-to-r from-red-700 to-red-800 text-white rounded-lg hover:from-red-800 hover:to-red-900 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 text-sm font-semibold border border-red-600/30">
-                            <Users className="h-4 w-4 mr-2" />
-                            Gestionar Miembros
-                        </button>
-
-                        {/* Info rápida de la comunidad */}
-                        <div className="mt-4 p-3 bg-zinc-700/30 rounded-lg border border-zinc-600/50">
-                            <div className="text-center">
-                                <p className="text-white font-semibold text-base">{comunidad?.nombre}</p>
-                                <p className="text-zinc-300 text-sm">{comunidad?.direccion}</p>
-                                <div className="flex items-center justify-center gap-2 mt-2">
-                                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                                    <span className="text-green-400 font-medium text-sm">Comunidad Activa</span>
+                                    ))}
                                 </div>
-                            </div>
+                            ) : (
+                                <div className="text-center py-12">
+                                    <FileText className="h-16 w-16 text-zinc-500 mx-auto mb-4" />
+                                    <p className="text-zinc-300 text-lg">No hay denuncias hoy</p>
+                                    <p className="text-zinc-400 text-sm mt-2">No se han reportado denuncias internas en el día de hoy</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

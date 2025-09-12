@@ -265,7 +265,7 @@ const Portal = () => {
                   <Shield className="h-8 w-8 text-red-400 mr-3" />
                   <div>
                     <h3 className="text-lg font-bold text-white">Perú Seguro</h3>
-                    <p className="text-red-300 text-sm">Sistema Nacional de Denuncias</p>
+                    <p className="text-red-300 text-sm">Sistema de Inteligencia Ciudadanas</p>
                   </div>
                 </div>
                 
@@ -289,10 +289,10 @@ const Portal = () => {
                   </div>
                 </div>
 
-                <button className="w-full mt-6 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white py-3 px-4 rounded-lg text-sm font-medium flex items-center justify-center transition-all duration-200 shadow-lg hover:shadow-xl">
+                <Link href={'https://wa.me/923427564?text=Hola,%20quiero%20integrar%20las%20denuncias%20de%20Perú%20Seguro'} target='_blank' className="w-full mt-6 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white py-3 px-4 rounded-lg text-sm font-medium flex items-center justify-center transition-all duration-200 shadow-lg hover:shadow-xl">
                   <ExternalLink className="h-4 w-4 mr-2" />
                   Integrar con Perú Seguro
-                </button>
+                </Link>
 
                 <div className="mt-4 p-3 bg-zinc-700/50 rounded border border-zinc-600">
                   <h4 className="text-sm font-semibold text-zinc-300 mb-2">
@@ -301,10 +301,10 @@ const Portal = () => {
                   <p className="text-xs text-zinc-400 mb-3">
                     Únete a nuestra red y accede a la API para ayudar a más personas.
                   </p>
-                  <button className="w-full bg-zinc-600 hover:bg-zinc-700 text-white py-2 px-3 rounded text-xs flex items-center justify-center transition-colors">
+                  <Link href={'https://wa.me/923427564?text=Hola,%20quiero%20solicitar%20acceso%20a%20la%20API%20de%20Perú%20Seguro%20para%20integrar%20sus%20denuncias%20en%20mi%20sistema.'} target='_blank' className="w-full bg-zinc-600 hover:bg-zinc-700 text-white py-2 px-3 rounded text-xs flex items-center justify-center transition-colors">
                     <HelpCircle className="h-3 w-3 mr-1" />
                     Solicitar Acceso API
-                  </button>
+                  </Link>
                 </div>
 
                 {/* Botón para volver al inicio */}

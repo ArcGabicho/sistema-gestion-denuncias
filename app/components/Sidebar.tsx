@@ -2,7 +2,6 @@ import { LayoutDashboard, Settings, FileText, BarChart2, Brain, Loader2, LogOut,
 import { signOut } from "firebase/auth";
 import { auth } from '@/app/utils/firebase';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 import Image from 'next/image';
 import toast from 'react-hot-toast';
@@ -19,22 +18,22 @@ const navItems = [
 
 type SidebarProps = {
     onChangeVista: (arg: { href: string }) => void;
+    onSignOut?: () => void;
 };
 
-const Sidebar = ({ onChangeVista }: SidebarProps) => {
+const Sidebar = ({ onChangeVista, onSignOut }: SidebarProps) => {
     const [loading, setLoading] = useState(false);
-    const router = useRouter();
 
     const handleSignOut = async () => {
         setLoading(true);
         try {
+            onSignOut?.(); // Notificar al Dashboard que se va a cerrar sesión
             await signOut(auth);
-            toast.success('Sesión cerrada correctamente', {duration: 2500});
-            router.push('/');
+            toast.success('Sesión cerrada correctamente', {duration: 1000});
+            // No redirigir aquí, dejar que el Dashboard maneje la redirección
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (error: any) {
-            toast.error(`Error al cerrar sesión: ${error.message}`, {duration: 2500})
-        } finally {
+            toast.error(`Error al cerrar sesión: ${error.message}`, {duration: 2500});
             setLoading(false);
         }
     };

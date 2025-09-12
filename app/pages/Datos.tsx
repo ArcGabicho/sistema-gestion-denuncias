@@ -31,6 +31,7 @@ import {
     Clock
 } from "lucide-react";
 import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
 
 // Registrar componentes de Chart.js
 ChartJS.register(
@@ -49,11 +50,14 @@ interface DenunciaData {
     id: string;
     titulo: string;
     descripcion: string;
-    estado: "pendiente" | "en_revision" | "resuelta";
+    estado: "pendiente" | "en_proceso" | "resuelta" | "rechazada";
     tipo?: string;
-    createdAt: { toDate?: () => Date; seconds?: number } | undefined;
+    fechaCreacion: { toDate?: () => Date; seconds?: number } | undefined;
+    fechaActualizacion: { toDate?: () => Date; seconds?: number } | undefined;
     comunidadId: string;
     denuncianteId?: string;
+    anonima?: boolean;
+    ubicacion?: string;
 }
 
 interface AnalyticsData {
@@ -121,7 +125,7 @@ const Datos = () => {
             fechaLimite.setDate(fechaLimite.getDate() - parseInt(dateRange));
 
             const denunciasQuery = query(
-                collection(db, "denuncias"),
+                collection(db, "denuncias_internas"),
                 where("comunidadId", "==", comunidadId)
             );
             
@@ -133,10 +137,10 @@ const Datos = () => {
 
             // Filtrar por rango de fechas
             const denunciasFiltradas = denunciasData.filter(denuncia => {
-                if (!denuncia.createdAt) return false;
-                const fechaDenuncia = denuncia.createdAt.toDate ? 
-                    denuncia.createdAt.toDate() : 
-                    new Date((denuncia.createdAt.seconds || 0) * 1000);
+                if (!denuncia.fechaCreacion) return false;
+                const fechaDenuncia = denuncia.fechaCreacion.toDate ? 
+                    denuncia.fechaCreacion.toDate() : 
+                    new Date((denuncia.fechaCreacion.seconds || 0) * 1000);
                 return fechaDenuncia >= fechaLimite;
             });
 
@@ -172,10 +176,10 @@ const Datos = () => {
 
         // Denuncias por mes
         const denunciasPorMes = denunciasData.reduce((acc, denuncia) => {
-            if (denuncia.createdAt) {
-                const fecha = denuncia.createdAt.toDate ? 
-                    denuncia.createdAt.toDate() : 
-                    new Date((denuncia.createdAt.seconds || 0) * 1000);
+            if (denuncia.fechaCreacion) {
+                const fecha = denuncia.fechaCreacion.toDate ? 
+                    denuncia.fechaCreacion.toDate() : 
+                    new Date((denuncia.fechaCreacion.seconds || 0) * 1000);
                 const mes = fecha.toLocaleDateString("es-ES", { month: "short", year: "numeric" });
                 acc[mes] = (acc[mes] || 0) + 1;
             }
@@ -185,10 +189,10 @@ const Datos = () => {
         // Denuncias por día de la semana
         const diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
         const denunciasPorDia = denunciasData.reduce((acc, denuncia) => {
-            if (denuncia.createdAt) {
-                const fecha = denuncia.createdAt.toDate ? 
-                    denuncia.createdAt.toDate() : 
-                    new Date((denuncia.createdAt.seconds || 0) * 1000);
+            if (denuncia.fechaCreacion) {
+                const fecha = denuncia.fechaCreacion.toDate ? 
+                    denuncia.fechaCreacion.toDate() : 
+                    new Date((denuncia.fechaCreacion.seconds || 0) * 1000);
                 const dia = diasSemana[fecha.getDay()];
                 acc[dia] = (acc[dia] || 0) + 1;
             }
@@ -212,51 +216,129 @@ const Datos = () => {
 
     const exportToExcel = () => {
         try {
-            // Crear CSV como alternativa a Excel
-            const headers = ['ID', 'Título', 'Descripción', 'Estado', 'Tipo', 'Fecha de Creación'];
-            const csvData = denuncias.map(denuncia => [
-                denuncia.id,
-                `"${denuncia.titulo.replace(/"/g, '""')}"`,
-                `"${denuncia.descripcion.replace(/"/g, '""')}"`,
-                denuncia.estado,
-                denuncia.tipo || 'Sin categoría',
-                denuncia.createdAt ? 
-                    (denuncia.createdAt.toDate ? 
-                        denuncia.createdAt.toDate() : 
-                        new Date((denuncia.createdAt.seconds || 0) * 1000)
-                    ).toLocaleDateString("es-ES") 
-                    : 'No disponible'
-            ]);
+            // Calcular fechas del período actual
+            const fechaActual = new Date();
+            const diasAtras = parseInt(dateRange);
+            const fechaDesde = new Date(fechaActual);
+            fechaDesde.setDate(fechaDesde.getDate() - diasAtras);
 
-            // Agregar estadísticas al final
-            csvData.push([]);
-            csvData.push(['ESTADÍSTICAS']);
-            csvData.push(['Total de Denuncias', analytics.totalDenuncias.toString()]);
-            csvData.push(['Tasa de Resolución', `${analytics.tasaResolucion.toFixed(1)}%`]);
-            csvData.push(['Pendientes', (analytics.denunciasPorEstado['pendiente'] || 0).toString()]);
-            csvData.push(['En Revisión', (analytics.denunciasPorEstado['en_revision'] || 0).toString()]);
-            csvData.push(['Resueltas', (analytics.denunciasPorEstado['resuelta'] || 0).toString()]);
+            // 1. Hoja de Resumen Ejecutivo
+            const resumenData = [
+                { 'Métrica': 'Total de Denuncias', 'Valor': analytics.totalDenuncias },
+                { 'Métrica': 'Período de Análisis', 'Valor': `Últimos ${dateRange} días` },
+                { 'Métrica': 'Fecha Desde', 'Valor': fechaDesde.toLocaleDateString("es-ES") },
+                { 'Métrica': 'Fecha Hasta', 'Valor': fechaActual.toLocaleDateString("es-ES") },
+                { 'Métrica': 'Fecha de Exportación', 'Valor': new Date().toLocaleDateString("es-ES") },
+                { 'Métrica': 'Tasa de Resolución', 'Valor': `${analytics.tasaResolucion.toFixed(1)}%` },
+                { 'Métrica': 'Estados Únicos', 'Valor': Object.keys(analytics.denunciasPorEstado).length },
+                { 'Métrica': 'Tipos Únicos', 'Valor': Object.keys(analytics.denunciasPorTipo).length }
+            ];
 
-            // Crear contenido CSV
-            const csvContent = [headers, ...csvData]
-                .map(row => row.join(','))
-                .join('\n');
+            // 2. Datos completos de denuncias
+            const exportData = denuncias.map(denuncia => ({
+                'ID': denuncia.id,
+                'Título': denuncia.titulo,
+                'Descripción': denuncia.descripcion,
+                'Estado': denuncia.estado,
+                'Tipo': denuncia.tipo || 'Sin categoría',
+                'Fecha de Creación': 
+                    denuncia.fechaCreacion ? 
+                        (denuncia.fechaCreacion.toDate ? 
+                            denuncia.fechaCreacion.toDate() : 
+                            new Date((denuncia.fechaCreacion.seconds || 0) * 1000)
+                        ).toLocaleDateString("es-ES") 
+                        : 'No disponible',
+                'Ubicación': denuncia.ubicacion || 'No especificada',
+                'Anónima': denuncia.anonima ? 'Sí' : 'No'
+            }));
 
-            // Descargar archivo
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
-            link.setAttribute('href', url);
-            link.setAttribute('download', `analisis-denuncias-${new Date().toLocaleDateString("es-ES").replace(/\//g, "-")}.csv`);
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            // 3. Análisis por Estado
+            const estadoData = Object.entries(analytics.denunciasPorEstado).map(([estado, cantidad]) => ({
+                'Estado': estado,
+                'Cantidad': cantidad,
+                'Porcentaje': analytics.totalDenuncias > 0 ? ((cantidad / analytics.totalDenuncias) * 100).toFixed(1) + '%' : '0%'
+            }));
+
+            // 4. Análisis por Tipo
+            const tipoData = Object.entries(analytics.denunciasPorTipo).map(([tipo, cantidad]) => ({
+                'Tipo de Denuncia': tipo,
+                'Cantidad': cantidad,
+                'Porcentaje': analytics.totalDenuncias > 0 ? ((cantidad / analytics.totalDenuncias) * 100).toFixed(1) + '%' : '0%'
+            }));
+
+            // 5. Tendencia Mensual
+            const mesData = Object.entries(analytics.denunciasPorMes)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([mes, cantidad]) => ({
+                    'Período': mes,
+                    'Cantidad de Denuncias': cantidad,
+                    'Tendencia': cantidad > 0 ? 'Activo' : 'Sin actividad'
+                }));
+
+            // 6. Actividad Diaria (últimos 30 días)
+            const diaData = Object.entries(analytics.denunciasPorDia)
+                .sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime())
+                .slice(-30) // Solo últimos 30 días
+                .map(([dia, cantidad]) => ({
+                    'Fecha': dia,
+                    'Cantidad': cantidad,
+                    'Día de la Semana': new Date(dia).toLocaleDateString('es-ES', { weekday: 'long' })
+                }));
+
+            // Crear libro de Excel
+            const wb = XLSX.utils.book_new();
             
-            toast.success("Archivo CSV exportado correctamente");
+            // Hoja 1: Resumen Ejecutivo
+            const wsResumen = XLSX.utils.json_to_sheet(resumenData);
+            wsResumen['!cols'] = [{ width: 25 }, { width: 20 }];
+            XLSX.utils.book_append_sheet(wb, wsResumen, "📊 Resumen");
+            
+            // Hoja 2: Datos Completos
+            const wsDatos = XLSX.utils.json_to_sheet(exportData);
+            wsDatos['!cols'] = [
+                { width: 15 }, // ID
+                { width: 30 }, // Título
+                { width: 50 }, // Descripción
+                { width: 15 }, // Estado
+                { width: 20 }, // Tipo
+                { width: 15 }, // Fecha
+                { width: 20 }, // Ubicación
+                { width: 10 }  // Anónima
+            ];
+            XLSX.utils.book_append_sheet(wb, wsDatos, "📋 Datos Completos");
+            
+            // Hoja 3: Gráfico por Estado
+            const wsEstado = XLSX.utils.json_to_sheet(estadoData);
+            wsEstado['!cols'] = [{ width: 20 }, { width: 12 }, { width: 12 }];
+            XLSX.utils.book_append_sheet(wb, wsEstado, "📈 Por Estado");
+            
+            // Hoja 4: Gráfico por Tipo
+            const wsTipo = XLSX.utils.json_to_sheet(tipoData);
+            wsTipo['!cols'] = [{ width: 25 }, { width: 12 }, { width: 12 }];
+            XLSX.utils.book_append_sheet(wb, wsTipo, "🏷️ Por Tipo");
+            
+            // Hoja 5: Tendencia Mensual
+            const wsMes = XLSX.utils.json_to_sheet(mesData);
+            wsMes['!cols'] = [{ width: 15 }, { width: 20 }, { width: 15 }];
+            XLSX.utils.book_append_sheet(wb, wsMes, "📅 Mensual");
+            
+            // Hoja 6: Actividad Diaria
+            const wsDia = XLSX.utils.json_to_sheet(diaData);
+            wsDia['!cols'] = [{ width: 15 }, { width: 12 }, { width: 18 }];
+            XLSX.utils.book_append_sheet(wb, wsDia, "🗓️ Diaria");
+            
+            // Generar nombre de archivo
+            const fileName = `Analisis_Denuncias_${new Date().toISOString().split('T')[0]}.xlsx`;
+            
+            // Exportar archivo
+            XLSX.writeFile(wb, fileName);
+            
+            // Mostrar notificación de éxito
+            toast.success(`✅ Archivo Excel exportado exitosamente!\n\n📁 ${fileName}\n\nIncluye:\n• 📊 Resumen ejecutivo\n• 📋 Datos completos\n• 📈 Gráficos por estado\n• 🏷️ Análisis por tipo\n• 📅 Tendencias mensuales\n• 🗓️ Actividad diaria`);
+            
         } catch (error) {
-            console.error("Error exportando:", error);
-            toast.error("Error al exportar el archivo");
+            console.error("Error exportando Excel:", error);
+            toast.error("❌ Error al exportar el archivo Excel");
         }
     };
 
@@ -367,7 +449,7 @@ const Datos = () => {
     }
 
     return (
-        <div className="p-6 space-y-6 min-h-screen bg-zinc-900">
+        <div className="p-6 space-y-6 min-h-screen bg-zinc-900 rounded-xl">
             {/* Header */}
             <div className="bg-gradient-to-r from-red-600 to-red-800 rounded-lg p-6 text-white border border-red-700/50 shadow-xl backdrop-blur-sm">
                 <div className="flex flex-col lg:flex-row items-center justify-between gap-4">
@@ -394,7 +476,7 @@ const Datos = () => {
                             className="flex items-center px-4 py-2 bg-zinc-800/50 backdrop-blur-sm rounded-lg hover:bg-zinc-700/50 transition-colors border border-zinc-700/50"
                         >
                             <FileSpreadsheet className="h-4 w-4 mr-2" />
-                            Exportar CSV
+                            Exportar Excel
                         </button>
                     </div>
                 </div>

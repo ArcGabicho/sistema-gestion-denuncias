@@ -8,7 +8,7 @@ import {
   Plus, 
   MapPin, 
   Calendar, 
-  User, 
+  User as UserIcon, 
   Clock, 
   AlertCircle,
   CheckCircle,
@@ -17,11 +17,14 @@ import {
   X,
   FileText
 } from 'lucide-react';
-import { collection, getDocs, addDoc, Timestamp, query, orderBy, where } from 'firebase/firestore';
+import { collection, getDocs, addDoc, Timestamp, query, orderBy, where, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, auth } from '@/app/utils/firebase';
 import { DenunciaInterna, FALTAS_ADMINISTRATIVAS, FaltaAdministrativa } from '@/app/interfaces/DenunciaInterna';
 import { toast } from 'react-hot-toast';
+import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { User } from '@/app/interfaces/User';
 
 interface DenunciaFormData {
   titulo: string;
@@ -42,41 +45,80 @@ const Denuncias = () => {
   const [showModal, setShowModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedDenuncia, setSelectedDenuncia] = useState<DenunciaInterna | null>(null);
+  const [denuncianteInfo, setDenuncianteInfo] = useState<User | null>(null);
+  const [loadingDenunciante, setLoadingDenunciante] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [updatingEstado, setUpdatingEstado] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   
   // Comunidad actual - por ahora hardcodeada, pero debería venir del contexto de usuario/auth
-  const [currentCommunityId] = useState('comunidad-general');
+  const [currentCommunityId, setCurrentCommunityId] = useState<string>('');
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data() as User;
+          setCurrentCommunityId(userData.comunidadId || '');
+          setCurrentUser(userData);
+        }
+      } else {
+        setCurrentUser(null);
+        setCurrentCommunityId('');
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   const [formData, setFormData] = useState<DenunciaFormData>({
     titulo: '',
     descripcion: '',
     tipo: 'otros',
-    comunidadId: currentCommunityId, // Usar la comunidad actual
+    comunidadId: '', // Se actualizará cuando se obtenga el id real
     ubicacion: '',
     anonima: false,
     evidencias: []
   });
 
+  useEffect(() => {
+    if (currentCommunityId) {
+      setFormData(prev => ({
+        ...prev,
+        comunidadId: currentCommunityId,
+      }));
+    }
+  }, [currentCommunityId]);
+
   const loadDenuncias = useCallback(async () => {
+    if (!currentCommunityId) {
+      setDenuncias([]);
+      setLoading(false);
+      console.log("No hay comunidadId para filtrar denuncias");
+      return;
+    }
     try {
-      // Filtrar denuncias solo de la comunidad actual
+      console.log("Buscando denuncias para comunidadId:", currentCommunityId);
       const q = query(
         collection(db, 'denuncias_internas'), 
         where('comunidadId', '==', currentCommunityId),
         orderBy('fechaCreacion', 'desc')
       );
       const querySnapshot = await getDocs(q);
-      const denunciasData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as DenunciaInterna[];
-      
-      setDenuncias(denunciasData);
+      console.log("Denuncias encontradas:", querySnapshot.docs.length);
+      if (querySnapshot.empty) {
+        setDenuncias([]);
+      } else {
+        const denunciasData = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as DenunciaInterna[];
+        setDenuncias(denunciasData);
+      }
     } catch (error) {
       console.error('Error loading denuncias:', error);
       toast.error('Error al cargar las denuncias');
-      // Si hay error con el filtro, mostrar lista vacía en lugar de todas las denuncias
       setDenuncias([]);
     } finally {
       setLoading(false);
@@ -130,19 +172,22 @@ const Denuncias = () => {
       }
 
       // Crear denuncia
-      const denunciaData = {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const denunciaData: any = {
         titulo: formData.titulo,
         descripcion: formData.descripcion,
         tipo: formData.tipo,
         estado: 'pendiente' as const,
         comunidadId: formData.comunidadId,
-        denuncianteId: formData.anonima ? undefined : auth.currentUser?.uid,
         fechaCreacion: Timestamp.now(),
         fechaActualizacion: Timestamp.now(),
         ubicacion: formData.ubicacion,
         evidenciaUrls,
         anonima: formData.anonima
       };
+      if (!formData.anonima) {
+        denunciaData.denuncianteId = auth.currentUser?.uid;
+      }
 
       await addDoc(collection(db, 'denuncias_internas'), denunciaData);
       
@@ -229,6 +274,52 @@ const Denuncias = () => {
       otros: 'Otros'
     };
     return labels[tipo] || tipo;
+  };
+
+  const loadDenuncianteInfo = async (denuncianteId: string) => {
+    setLoadingDenunciante(true);
+    try {
+      const userDoc = await getDoc(doc(db, "users", denuncianteId));
+      if (userDoc.exists()) {
+        setDenuncianteInfo(userDoc.data() as User);
+      } else {
+        setDenuncianteInfo(null);
+      }
+    } catch (error) {
+      console.error('Error loading denunciante info:', error);
+      setDenuncianteInfo(null);
+    } finally {
+      setLoadingDenunciante(false);
+    }
+  };
+
+  const handleEstadoChange = async (denunciaId: string, newEstado: 'pendiente' | 'en_proceso' | 'resuelta' | 'rechazada') => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      toast.error('No tienes permisos para cambiar el estado de las denuncias');
+      return;
+    }
+
+    setUpdatingEstado(true);
+    try {
+      const denunciaRef = doc(db, 'denuncias_internas', denunciaId);
+      await updateDoc(denunciaRef, {
+        estado: newEstado,
+        fechaActualizacion: Timestamp.now()
+      });
+      
+      toast.success('Estado actualizado correctamente');
+      loadDenuncias(); // Recargar la lista
+      
+      // Actualizar la denuncia seleccionada si está abierta
+      if (selectedDenuncia && selectedDenuncia.id === denunciaId) {
+        setSelectedDenuncia(prev => prev ? { ...prev, estado: newEstado } : null);
+      }
+    } catch (error) {
+      console.error('Error updating estado:', error);
+      toast.error('Error al actualizar el estado');
+    } finally {
+      setUpdatingEstado(false);
+    }
   };
 
   if (loading) {
@@ -366,7 +457,7 @@ const Denuncias = () => {
                             <span>{formatDate(denuncia.fechaCreacion)}</span>
                           </div>
                           <div className="flex items-center gap-1">
-                            <User className="h-3 w-3 flex-shrink-0" />
+                            <UserIcon className="h-3 w-3 flex-shrink-0" />
                             <span>{denuncia.anonima ? 'Anónimo' : 'Usuario registrado'}</span>
                           </div>
                         </div>
@@ -375,9 +466,15 @@ const Denuncias = () => {
                       {/* Botón de acción */}
                       <div className="flex-shrink-0">
                         <button
-                          onClick={() => {
+                          onClick={async () => {
                             setSelectedDenuncia(denuncia);
                             setShowDetailModal(true);
+                            setDenuncianteInfo(null);
+                            
+                            // Cargar info del denunciante si no es anónima
+                            if (!denuncia.anonima && denuncia.denuncianteId) {
+                              await loadDenuncianteInfo(denuncia.denuncianteId);
+                            }
                           }}
                           className="px-3 py-2 bg-zinc-700/50 text-white rounded-lg flex items-center gap-2 hover:bg-zinc-600/50 transition-colors text-sm"
                         >
@@ -552,7 +649,10 @@ const Denuncias = () => {
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-2xl font-bold text-white">Detalles de la Denuncia</h2>
                   <button
-                    onClick={() => setShowDetailModal(false)}
+                    onClick={() => {
+                      setShowDetailModal(false);
+                      setDenuncianteInfo(null);
+                    }}
                     className="text-zinc-400 hover:text-white transition-colors"
                   >
                     <X className="h-6 w-6" />
@@ -562,9 +662,32 @@ const Denuncias = () => {
                 <div className="space-y-4">
                   <div>
                     <h3 className="text-lg font-semibold text-white mb-2">{selectedDenuncia.titulo}</h3>
-                    <div className={`inline-flex px-3 py-1 rounded-full border text-sm font-medium items-center gap-1 ${getEstadoColor(selectedDenuncia.estado)}`}>
-                      {getEstadoIcon(selectedDenuncia.estado)}
-                      {selectedDenuncia.estado.replace('_', ' ').toUpperCase()}
+                    <div className="flex items-center justify-between gap-4">
+                      <div className={`inline-flex px-3 py-1 rounded-full border text-sm font-medium items-center gap-1 ${getEstadoColor(selectedDenuncia.estado)}`}>
+                        {getEstadoIcon(selectedDenuncia.estado)}
+                        {selectedDenuncia.estado.replace('_', ' ').toUpperCase()}
+                      </div>
+                      
+                      {/* Selector de estado para administradores */}
+                      {currentUser && currentUser.role === 'admin' && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-zinc-400">Cambiar estado:</span>
+                          <select
+                            value={selectedDenuncia.estado}
+                            onChange={(e) => handleEstadoChange(selectedDenuncia.id!, e.target.value as 'pendiente' | 'en_proceso' | 'resuelta' | 'rechazada')}
+                            disabled={updatingEstado}
+                            className="text-xs px-2 py-1 bg-zinc-700/50 border border-zinc-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-red-500 disabled:opacity-50"
+                          >
+                            <option value="pendiente">Pendiente</option>
+                            <option value="en_proceso">En Proceso</option>
+                            <option value="resuelta">Resuelta</option>
+                            <option value="rechazada">Rechazada</option>
+                          </select>
+                          {updatingEstado && (
+                            <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin"></div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -593,7 +716,52 @@ const Denuncias = () => {
 
                   <div>
                     <h4 className="text-sm font-medium text-zinc-300 mb-1">Denunciante</h4>
-                    <p className="text-white">{selectedDenuncia.anonima ? 'Anónimo' : 'Usuario registrado'}</p>
+                    {selectedDenuncia.anonima ? (
+                      <p className="text-white">Anónimo</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {loadingDenunciante ? (
+                          <div className="bg-gradient-to-r from-zinc-700/40 to-zinc-600/40 p-4 rounded-xl border border-zinc-600/50 animate-pulse">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-zinc-600/50 rounded-full"></div>
+                              <div className="space-y-2 flex-1">
+                                <div className="h-4 bg-zinc-600/50 rounded w-32"></div>
+                                <div className="h-3 bg-zinc-600/50 rounded w-40"></div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : denuncianteInfo ? (
+                          <div className="bg-gradient-to-r from-blue-900/20 to-indigo-900/20 p-4 rounded-xl border border-blue-500/30 backdrop-blur-sm">
+                            <div className="flex items-start gap-3">
+                              <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full flex items-center justify-center">
+                                <UserIcon className="h-5 w-5 text-white" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h5 className="text-white font-semibold text-base mb-2">
+                                  {denuncianteInfo.name} {denuncianteInfo.lastname}
+                                </h5>
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2 text-sm">
+                                    <div className="w-1.5 h-1.5 bg-blue-400 rounded-full"></div>
+                                    <span className="text-blue-200">{denuncianteInfo.email}</span>
+                                  </div>
+                                  {denuncianteInfo.phone && (
+                                    <div className="flex items-center gap-2 text-sm">
+                                      <div className="w-1.5 h-1.5 bg-blue-400 rounded-full"></div>
+                                      <span className="text-blue-200">{denuncianteInfo.phone}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="bg-gradient-to-r from-amber-900/20 to-orange-900/20 p-3 rounded-lg border border-amber-500/30">
+                            <p className="text-amber-200 text-sm">Usuario registrado (información no disponible)</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {selectedDenuncia.evidenciaUrls && selectedDenuncia.evidenciaUrls.length > 0 && (

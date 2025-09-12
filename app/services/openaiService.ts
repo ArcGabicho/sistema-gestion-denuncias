@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import OpenAI from 'openai';
 
 // Verificar si la API key está configurada
@@ -52,7 +53,8 @@ Tu función es:
 
 Siempre responde de manera profesional, clara y útil. Utiliza los datos proporcionados para dar respuestas precisas y basadas en evidencia.`;
 
-  async initializeContext(): Promise<void> {
+  // Inicializa el contexto de IA con denuncias internas de la comunidad del usuario autenticado
+  async initializeContextWithComunidad(comunidadId: string): Promise<void> {
     if (!this.isConfigured()) {
       console.warn('OpenAI no está configurado. Usando datos simulados.');
       this.context = {
@@ -72,12 +74,82 @@ Siempre responde de manera profesional, clara y útil. Utiliza los datos proporc
     }
 
     try {
-      // Importar dinámicamente el servicio de Firebase para evitar problemas de SSR
-      const { firebaseAnalyticsService } = await import('./firebaseAnalyticsService');
-      this.context = await firebaseAnalyticsService.getAnalysisContext();
+      // Importar dinámicamente Firestore y utilidades
+      const { db } = await import('../utils/firebase');
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { collection, query, where, getDocs, Timestamp } = await import('firebase/firestore');
+      // Obtener denuncias internas de la comunidad
+      const q = query(collection(db, 'denuncias_internas'), where('comunidadId', '==', comunidadId));
+      const snapshot = await getDocs(q);
+      const denuncias = snapshot.docs.map(doc => doc.data());
+
+      // Procesar datos para AnalysisContext
+      const totalDenuncias = denuncias.length;
+      const denunciasPorCategoria: Record<string, number> = {};
+      const denunciasPorEstado: Record<string, number> = {};
+      let zonasConflictivas: { zona: string; cantidad: number; coordenadas?: string }[] = [];
+      let tendenciasRecientes: { descripcion: string; cambio: number; periodo: string }[] = [];
+
+      // Categoría y estado
+      denuncias.forEach((d: any) => {
+        denunciasPorCategoria[d.tipo] = (denunciasPorCategoria[d.tipo] || 0) + 1;
+        denunciasPorEstado[d.estado] = (denunciasPorEstado[d.estado] || 0) + 1;
+      });
+
+      // Tendencias recientes (últimos 30 días vs anteriores 30 días)
+      const ahora = new Date();
+      const hace30Dias = new Date(ahora.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const hace60Dias = new Date(ahora.getTime() - 60 * 24 * 60 * 60 * 1000);
+      const denunciasRecientes = denuncias.filter((d: any) => d.fechaCreacion.toDate() >= hace30Dias);
+      const denunciasAnteriores = denuncias.filter((d: any) => d.fechaCreacion.toDate() >= hace60Dias && d.fechaCreacion.toDate() < hace30Dias);
+      const cambioGeneral = ((denunciasRecientes.length - denunciasAnteriores.length) / Math.max(denunciasAnteriores.length, 1)) * 100;
+      tendenciasRecientes.push({ descripcion: 'Cambio general en el volumen de denuncias', cambio: cambioGeneral, periodo: 'últimos 30 días' });
+
+      // Tendencias por categoría
+      const categoriasRecientes: Record<string, number> = {};
+      const categoriasAnteriores: Record<string, number> = {};
+      denunciasRecientes.forEach((d: any) => { categoriasRecientes[d.tipo] = (categoriasRecientes[d.tipo] || 0) + 1; });
+      denunciasAnteriores.forEach((d: any) => { categoriasAnteriores[d.tipo] = (categoriasAnteriores[d.tipo] || 0) + 1; });
+      Object.keys(categoriasRecientes).forEach(categoria => {
+        const actual = categoriasRecientes[categoria] || 0;
+        const anterior = categoriasAnteriores[categoria] || 0;
+        if (anterior > 0) {
+          const cambio = ((actual - anterior) / anterior) * 100;
+          if (Math.abs(cambio) > 20) {
+            tendenciasRecientes.push({ descripcion: `Denuncias de ${categoria}`, cambio, periodo: 'últimos 30 días' });
+          }
+        }
+      });
+      tendenciasRecientes = tendenciasRecientes.slice(0, 5);
+
+      // Zonas conflictivas (por ubicación)
+      const zonas: Record<string, { cantidad: number; coordenadas?: string }> = {};
+      denuncias.forEach((d: any) => {
+        const zona = d.ubicacion || 'Sin ubicación';
+        if (!zonas[zona]) zonas[zona] = { cantidad: 0 };
+        zonas[zona].cantidad++;
+      });
+      zonasConflictivas = Object.entries(zonas).map(([zona, data]) => ({ zona, cantidad: data.cantidad })).sort((a, b) => b.cantidad - a.cantidad).slice(0, 10);
+
+      // Estadísticas adicionales
+      const denunciasUltimaSemana = denuncias.filter((d: any) => d.fechaCreacion.toDate() >= new Date(ahora.getTime() - 7 * 24 * 60 * 60 * 1000)).length;
+      const estadisticas = {
+        promedioResolucion: 5, // Valor estimado
+        satisfaccionPromedio: 0,
+        denunciasUltimaSemana,
+        crecimientoMensual: ((denunciasRecientes.length - denunciasAnteriores.length) / Math.max(denunciasAnteriores.length, 1)) * 100
+      };
+
+      this.context = {
+        totalDenuncias,
+        denunciasPorCategoria,
+        denunciasPorEstado,
+        tendenciasRecientes,
+        zonasConflictivas,
+        estadisticas
+      };
     } catch (error) {
       console.error('Error initializing context:', error);
-      // Usar datos por defecto si no se puede conectar a Firebase
       this.context = {
         totalDenuncias: 0,
         denunciasPorCategoria: {},

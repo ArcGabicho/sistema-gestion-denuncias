@@ -58,14 +58,27 @@ const IA = () => {
   useEffect(() => {
     const initializeAI = async () => {
       try {
-        await openaiService.initializeContext();
-        setIsInitialized(true);
+        // Obtener usuario autenticado y su comunidadId
+        const { auth } = await import('@/app/utils/firebase');
+        const { onAuthStateChanged } = await import('firebase/auth');
+        const { getDoc, doc } = await import('firebase/firestore');
+        onAuthStateChanged(auth, async (user) => {
+          if (user) {
+            const userDoc = await getDoc(doc(await import('@/app/utils/firebase').then(m => m.db), 'users', user.uid));
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              if (userData.comunidadId) {
+                await openaiService.initializeContextWithComunidad(userData.comunidadId);
+                setIsInitialized(true);
+              }
+            }
+          }
+        });
       } catch (error) {
         console.error('Error inicializando IA:', error);
         toast.error('Error al inicializar el asistente de IA');
       }
     };
-
     initializeAI();
   }, []);
 
